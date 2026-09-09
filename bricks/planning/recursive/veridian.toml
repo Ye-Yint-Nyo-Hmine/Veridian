@@ -1,0 +1,12 @@
+name = "planning/recursive"
+version = "0.1.0"
+description = "Decomposes compound steps into sub-steps on demand as the plan is walked."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "planner"
+methods = ["plan", "next", "is_complete"]

@@ -1,0 +1,12 @@
+name = "planning/default"
+version = "0.1.0"
+description = "A linear plan: split the goal into steps and hand them out one at a time."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "planner"
+methods = ["plan", "next", "is_complete"]

@@ -1,0 +1,15 @@
+name = "context/default"
+version = "0.1.0"
+description = "Heuristic retrieval: glob the workspace, chunk by lines, rank by keyword overlap."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "context"
+methods = ["index", "retrieve", "invalidate"]
+
+[capabilities]
+requires = ["workspace:read"]

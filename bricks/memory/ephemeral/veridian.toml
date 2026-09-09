@@ -1,0 +1,12 @@
+name = "memory/ephemeral"
+version = "0.1.0"
+description = "In-process memory. Lives only as long as the brick process."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "memory"
+methods = ["write", "read", "search", "forget"]

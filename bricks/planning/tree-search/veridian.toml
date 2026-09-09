@@ -1,0 +1,12 @@
+name = "planning/tree-search"
+version = "0.1.0"
+description = "Keeps several candidate step orderings and follows the branch with the fewest failures."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "planner"
+methods = ["plan", "next", "is_complete"]

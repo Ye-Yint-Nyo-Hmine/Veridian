@@ -40,6 +40,15 @@
         "observations": { "type": "array", "items": { "type": "object" } }
       }
     },
+    "NextStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
     "next_result": {
       "type": "object",
       "additionalProperties": false,
@@ -47,7 +56,7 @@
       "properties": {
         "step": {
           "oneOf": [
-            { "$ref": "#/$defs/Step" },
+            { "$ref": "#/$defs/NextStep" },
             { "type": "null" }
           ]
         }
