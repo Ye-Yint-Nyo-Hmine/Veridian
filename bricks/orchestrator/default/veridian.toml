@@ -1,0 +1,22 @@
+name = "orchestrator/default"
+version = "0.1.0"
+description = "The default agent loop: retrieve, plan, generate with tools, dispatch, observe, repeat. A brick — replace it to replace the agent architecture."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = [
+  "contract:inference",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+]
+
+[[implements]]
+contract = "orchestrator"
+methods = ["run"]

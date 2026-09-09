@@ -1,0 +1,34 @@
+# Everything local: an OpenAI-compatible server (Ollama / llama.cpp / vLLM / LM Studio) for both
+# inference and embeddings, a vector context index over that embedding model, SQLite memory.
+#
+# Point inference.config.base_url / VERIDIAN_LOCAL_BASE_URL at your server. No cloud keys needed.
+# This is the same kernel and the same orchestrator as stacks/default.toml.
+
+[stack]
+name = "local-only"
+description = "Local OpenAI-compatible server for inference + embeddings; vector context; SQLite memory."
+
+[policy]
+grant = [
+  "network",
+  "process:spawn",
+  "workspace:read",
+  "workspace:write",
+  "contract:inference",
+  "contract:model_provider",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+]
+
+[bindings]
+inference = { brick = "bricks/inference/local", config = { model = "llama3.2" } }
+model_provider = { brick = "bricks/inference/local", config = { embed_model = "nomic-embed-text" } }
+context = { brick = "bricks/context/vector", config = { embed_model = "nomic-embed-text" } }
+planner = "bricks/planning/default"
+memory = { brick = "bricks/memory/vector", config = { embed_model = "nomic-embed-text" } }
+sandbox = "bricks/sandbox/local"
+tools = "bricks/tools/filesystem"
+orchestrator = "bricks/orchestrator/default"

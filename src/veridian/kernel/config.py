@@ -45,6 +45,9 @@ class ResolvedStack:
     def active(self) -> list[ResolvedBinding]:
         return [b for b in self.bindings if not b.disabled]
 
+    def bound_map(self) -> list[str]:
+        return [b.contract for b in self.bindings if not b.disabled]
+
     def binding_for(self, contract: str) -> ResolvedBinding | None:
         return next((b for b in self.bindings if b.contract == contract), None)
 

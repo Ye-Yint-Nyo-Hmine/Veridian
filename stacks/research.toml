@@ -1,0 +1,42 @@
+# A heavier stack for exploration: multi-model routing, an AST context graph, tree-search
+# planning, SQLite graph memory. Same kernel, same orchestrator.
+
+[stack]
+name = "research"
+description = "Rule-based multi-model routing + AST graph context + tree-search planning + graph memory."
+
+[policy]
+grant = [
+  "network",
+  "process:spawn",
+  "workspace:read",
+  "workspace:write",
+  "contract:inference",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+]
+
+[bindings]
+context = "bricks/context/graph"
+planner = "bricks/planning/tree-search"
+memory = "bricks/memory/graph"
+sandbox = "bricks/sandbox/local"
+tools = "bricks/tools/filesystem"
+orchestrator = "bricks/orchestrator/default"
+
+[bindings.inference]
+brick = "bricks/inference/routing"
+
+[bindings.inference.config]
+default = "deep"
+providers = [
+  { name = "deep", kind = "anthropic", model = "claude-opus-5" },
+  { name = "fast", kind = "openai", model = "gpt-4o-mini" },
+]
+rules = [
+  { when_max_messages = 2, use = "fast" },
+  { when_has_tools = true, use = "deep" },
+]

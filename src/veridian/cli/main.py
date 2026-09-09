@@ -1,8 +1,10 @@
-"""CLI entry point. Commands are wired up in Phase 6."""
+"""The ``veridian`` CLI."""
 
 from __future__ import annotations
 
 import typer
+
+from veridian.cli.commands import brick_cmds, doctor_cmds, protocol_cmds, run_cmds, stack_cmds
 
 app = typer.Typer(
     name="veridian",
@@ -11,10 +13,11 @@ app = typer.Typer(
     add_completion=False,
 )
 
-
-@app.callback()
-def _root() -> None:
-    """Veridian runtime CLI."""
+app.command("run")(run_cmds.run)
+app.command("doctor")(doctor_cmds.doctor)
+app.add_typer(stack_cmds.app, name="stack")
+app.add_typer(brick_cmds.app, name="brick")
+app.add_typer(protocol_cmds.app, name="protocol")
 
 
 @app.command()
