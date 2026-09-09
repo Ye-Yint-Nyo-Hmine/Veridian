@@ -28,7 +28,27 @@ requires = ["workspace:read", "contract:model_provider"]
 [[implements]]
 contract = "context"
 methods = ["index", "retrieve", "invalidate"]
+
+# Optional: third-party packages. A brick that declares these is resolved into its own
+# environment on install; without this table the brick shares the kernel's interpreter.
+[dependencies]
+python = ["httpx>=0.27", "tenacity>=8"]
+# python_version = ">=3.12,<3.14"   # optional interpreter constraint (uv venv --python)
+# node = { "@octokit/rest" = "^21" } # for runtime = "node": installed into a local node_modules
 ```
+
+## Dependency isolation
+
+Bricks launch under `${python}` / `${node}`. By default that is the kernel's own interpreter, so
+every brick shares one dependency set — fine for bricks you wrote, a problem for two third-party
+bricks with conflicting requirements.
+
+Declare a `[dependencies]` table and run `veridian brick install <ref>` (or `--all`). A Python
+brick gets a private venv under `.veridian/venv` resolved with `uv`; a Node brick gets a local
+`node_modules`. The resolved interpreter is recorded in `.veridian/environment.json`, stamped with
+a fingerprint of the dependency table — edit the table and the stale environment is ignored until
+you reinstall. A declared-but-uninstalled brick still launches (under the kernel interpreter);
+`veridian brick list` shows each brick's environment as `n/a` / `missing` / `stale` / `ok`.
 
 ## Python
 

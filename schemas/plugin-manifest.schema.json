@@ -62,6 +62,27 @@
     "optional_dependencies": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "dependencies": {
+      "description": "Third-party packages this brick needs at runtime. When present, the brick is resolved into its own isolated environment on install (a private venv for python, a local node_modules for node) instead of sharing the kernel's interpreter. Bricks with no dependencies table keep running under ${python} / ${node} as before.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "python": {
+          "description": "PEP 508 requirement strings, resolved with uv into a private venv.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "python_version": {
+          "description": "Interpreter constraint passed to `uv venv --python` (e.g. \"3.13\", \">=3.12,<3.14\").",
+          "type": "string"
+        },
+        "node": {
+          "description": "package name -> semver range, written to a generated package.json and installed with npm into a local node_modules.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
     }
   }
 }

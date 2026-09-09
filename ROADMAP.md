@@ -15,6 +15,9 @@ boundaries it affects already have the right shape.
 
 ## Isolation
 
+- **Per-brick dependency isolation** — *landed in Milestone 2.* A brick with a `[dependencies]`
+  manifest table is resolved into its own venv / `node_modules` on `veridian brick install`
+  instead of sharing the kernel's interpreter.
 - **Container isolation** (Docker / Podman) as a sandbox brick mode and as a brick-spawn mode.
 - **WASM isolation** for bricks that can be compiled to WASI.
 - **Firecracker microVMs** for untrusted bricks.

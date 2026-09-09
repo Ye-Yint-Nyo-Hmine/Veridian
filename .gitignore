@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Per-brick isolated environments (`veridian brick install`): the python venv lives under
+# `.veridian/` (covered below); node bricks get a local node_modules.
+node_modules/
+
 # Windows crash dumps
 *.stackdump
 

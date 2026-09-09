@@ -1,0 +1,7 @@
+[stack]
+name = "deps-isolation"
+description = "Two bricks pinning incompatible versions of the same package, bound in one stack."
+
+[bindings]
+tools = "tests/fixtures/deps/six_old"
+workspace = "tests/fixtures/deps/six_new"

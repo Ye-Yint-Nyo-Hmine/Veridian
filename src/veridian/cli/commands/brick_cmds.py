@@ -10,6 +10,11 @@ from rich.table import Table
 from veridian.cli._common import bricks_root, console, err_console
 from veridian.conformance import run_conformance_sync
 from veridian.contracts.errors import ProtocolError
+from veridian.plugin_runtime.environments import (
+    EnvironmentError_,
+    environment_status,
+    resolve_environment,
+)
 from veridian.plugin_runtime.loader import discover_with_errors, resolve_brick
 from veridian.plugin_runtime.manifest import load_manifest
 from veridian.security.trust import assess
@@ -25,13 +30,14 @@ def _resolve(ref: str):
 def list_() -> None:
     """List every brick under bricks/."""
     found, errors = discover_with_errors(bricks_root())
-    table = Table("brick", "contracts", "runtime", "requires")
+    table = Table("brick", "contracts", "runtime", "requires", "env")
     for name, m in sorted(found.items()):
         table.add_row(
             name,
             ", ".join(sorted(m.implements)),
             m.runtime,
             ", ".join(m.requires) or "-",
+            environment_status(m),
         )
     console.print(table)
     for path, exc in errors:
@@ -49,8 +55,48 @@ def inspect(ref: str) -> None:
         console.print(f"  implements [cyan]{contract}[/]: {', '.join(methods)}")
     console.print(f"requires: {m.requires or '-'}")
     console.print(f"env passthrough: {m.env_passthrough or '-'}")
+    if m.needs_isolated_env():
+        console.print(f"dependencies: {m.dependencies}  [dim](environment: {environment_status(m)})[/]")
+        console.print(f"interpreter: {m.resolved_interpreter()}")
     a = assess(m)
     console.print(f"trust: [bold]{a.level.name}[/] — {a.advisory}")
+
+
+@app.command()
+def install(
+    ref: str = typer.Argument(None),
+    all_: bool = typer.Option(False, "--all", help="Install every brick that declares dependencies."),
+    force: bool = typer.Option(False, "--force", help="Rebuild even if the environment is current."),
+    no_sdk: bool = typer.Option(False, "--no-sdk", help="Skip installing the veridian SDK into python venvs."),
+) -> None:
+    """Resolve a brick's private environment from its manifest's ``[dependencies]`` table.
+
+    A python brick gets a venv under ``.veridian/venv`` resolved with ``uv``; a node brick gets a
+    local ``node_modules`` via ``npm``. Bricks with no ``[dependencies]`` table are left alone.
+    """
+    if all_:
+        found, _ = discover_with_errors(bricks_root())
+        manifests = [m for m in found.values() if m.needs_isolated_env()]
+        if not manifests:
+            console.print("no bricks under bricks/ declare a [dependencies] table")
+            return
+    elif ref:
+        manifests = [_resolve(ref)]
+    else:
+        err_console.print("give a brick ref or --all")
+        raise typer.Exit(2)
+
+    table = Table("brick", "runtime", "result", "interpreter / detail")
+    failed = 0
+    for m in manifests:
+        try:
+            res = resolve_environment(m, with_sdk=not no_sdk, force=force)
+            table.add_row(res.brick, res.runtime, res.action, res.interpreter or res.detail or "-")
+        except (EnvironmentError_, ProtocolError) as exc:
+            failed += 1
+            table.add_row(m.name, m.runtime, "[red]FAILED[/]", str(exc).splitlines()[0])
+    console.print(table)
+    raise typer.Exit(1 if failed else 0)
 
 
 @app.command()

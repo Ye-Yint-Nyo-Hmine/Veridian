@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 import sys
 import tomllib
@@ -14,6 +16,20 @@ from veridian.contracts._schemas import SchemaValidationError
 from veridian.contracts.errors import INVALID_MANIFEST, ProtocolError
 
 MANIFEST_FILENAME = "veridian.toml"
+
+# Where `veridian brick install` records a brick's resolved private environment. Kept inside the
+# brick directory (already git-ignored) so the environment travels with the brick and nothing
+# central has to be consulted at spawn time.
+ENV_DIRNAME = ".veridian"
+ENV_RECORD_FILENAME = "environment.json"
+
+
+def dependency_fingerprint(dependencies: dict[str, Any]) -> str:
+    """A stable short hash of a manifest's ``[dependencies]`` table. The install step stamps the
+    resolved environment with this; :meth:`Manifest.resolved_command` only trusts a recorded
+    interpreter whose fingerprint still matches, so editing the table invalidates a stale venv."""
+    canonical = json.dumps(dependencies or {}, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -30,6 +46,7 @@ class Manifest:
     requires: list[str] = field(default_factory=list)
     env_passthrough: list[str] = field(default_factory=list)
     optional_dependencies: list[str] = field(default_factory=list)
+    dependencies: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def declares(self, contract: str, method: str | None = None) -> bool:
@@ -37,16 +54,53 @@ class Manifest:
             return False
         return method is None or method in self.implements[contract]
 
+    def needs_isolated_env(self) -> bool:
+        """True when this brick declares third-party dependencies and therefore must be resolved
+        into its own environment rather than sharing the kernel's interpreter."""
+        deps = self.dependencies
+        return bool(deps.get("python") or deps.get("node") or deps.get("python_version"))
+
+    @property
+    def env_record_path(self) -> Path:
+        return self.directory / ENV_DIRNAME / ENV_RECORD_FILENAME
+
+    def load_env_record(self) -> dict[str, Any] | None:
+        """The environment stamped by the last successful ``veridian brick install``, or ``None``
+        if the brick was never installed."""
+        try:
+            return json.loads(self.env_record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def resolved_interpreter(self) -> str:
+        """The interpreter ``${python}`` expands to for *this* brick. A brick with a private
+        environment whose fingerprint still matches its manifest gets that venv's python; every
+        other brick (no dependencies, or a stale/absent record) gets the kernel's own interpreter,
+        exactly as in Milestone 1."""
+        if not self.needs_isolated_env():
+            return sys.executable
+        record = self.load_env_record()
+        if not record or record.get("runtime") != "python":
+            return sys.executable
+        if record.get("fingerprint") != dependency_fingerprint(self.dependencies):
+            return sys.executable
+        interp = record.get("interpreter")
+        if interp and Path(interp).exists():
+            return interp
+        return sys.executable
+
     def resolved_command(self) -> list[str]:
         """Build the argv to spawn.
 
-        * ``${python}`` -> the kernel's own interpreter (bricks run under the same Python).
-        * ``${node}`` -> the ``node`` on PATH.
+        * ``${python}`` -> this brick's resolved interpreter: its private venv when it declares
+          ``[dependencies]`` and has been installed, otherwise the kernel's own interpreter.
+        * ``${node}`` -> the ``node`` on PATH (a node brick with dependencies resolves its
+          ``node_modules`` locally, next to its entrypoint, by Node's own algorithm).
         * A relative argument that names a file inside the brick directory is made absolute, so the
           brick can be launched with any working directory (bricks run confined to the workspace
           root, never their own directory).
         """
-        subs = {"${python}": sys.executable, "${node}": shutil.which("node") or "node"}
+        subs = {"${python}": self.resolved_interpreter(), "${node}": shutil.which("node") or "node"}
         out: list[str] = []
         for part in self.spawn_command:
             if part in subs:
@@ -86,6 +140,7 @@ def parse_manifest(data: dict[str, Any], directory: Path) -> Manifest:
         requires=list(caps.get("requires", [])),
         env_passthrough=list(data.get("env_passthrough", [])),
         optional_dependencies=list(data.get("optional_dependencies", [])),
+        dependencies=dict(data.get("dependencies", {})),
         raw=data,
     )
 

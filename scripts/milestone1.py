@@ -69,7 +69,7 @@ def c7_protocol_only():
 def c8_no_model_required():
     env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
     doctor = subprocess.run([PY, "-m", "veridian.cli.main", "doctor"], cwd=REPO, capture_output=True, text=True, env=env)
-    suite = subprocess.run([PY, "-m", "pytest", "-q", "-m", "not live"], cwd=REPO, capture_output=True, text=True, env=env)
+    suite = subprocess.run([PY, "-m", "pytest", "-q", "-m", "not live and not install"], cwd=REPO, capture_output=True, text=True, env=env)
     tail = "\n".join(suite.stdout.strip().splitlines()[-2:])
     return doctor.returncode == 0 and suite.returncode == 0, f"doctor ok={doctor.returncode == 0} | {tail}"
 
