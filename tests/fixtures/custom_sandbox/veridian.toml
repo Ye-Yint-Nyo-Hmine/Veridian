@@ -1,0 +1,15 @@
+name = "sandbox/custom-fixture"
+version = "0.1.0"
+description = "A second, independent sandbox implementation — used to prove sandbox is swappable without touching the kernel."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["process:spawn"]
+
+[[implements]]
+contract = "sandbox"
+methods = ["exec", "spawn", "write", "kill", "reset"]
