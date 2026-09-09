@@ -1,0 +1,26 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Hermetic suite must pass before release
+        run: |
+          uv sync --extra dev
+          uv run pytest -m "not live"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+      # Publishing to an index is a roadmap item; artifacts are attached to the run for now.

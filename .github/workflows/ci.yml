@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  schemas-and-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --extra dev
+      - name: JSON Schemas are valid
+        run: uv run python -m tests.conformance.check_schemas
+      - name: Every brick manifest validates
+        run: uv run veridian brick validate --all
+      - name: Every brick passes conformance
+        run: uv run veridian brick conformance --all
+        env:
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
