@@ -11,3 +11,7 @@ wheels/
 
 # Windows crash dumps
 *.stackdump
+
+# Brick runtime state / conformance probe artifacts
+.veridian/
+_probe*.txt

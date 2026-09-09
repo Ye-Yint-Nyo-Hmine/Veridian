@@ -13,6 +13,7 @@ lifecycle breach fails conformance.
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,7 +104,8 @@ async def run_conformance(brick_dir: Path, *, timeout: float = 30.0) -> Conforma
     manifest = load_manifest(brick_dir)
     report = ConformanceReport(brick=manifest.name, ok=False, negotiated=False)
 
-    workspace = brick_dir  # bricks are read-only here; a probe write stays inside the brick dir
+    tmp = tempfile.TemporaryDirectory(prefix="veridian-conformance-")
+    workspace = Path(tmp.name)  # a throwaway workspace, so probe writes never touch the repo
     proc = BrickProcess(
         manifest.name,
         manifest.resolved_command(),
@@ -163,6 +165,10 @@ async def run_conformance(brick_dir: Path, *, timeout: float = 30.0) -> Conforma
         except ProtocolError:
             pass
         await proc.stop()
+        try:
+            tmp.cleanup()
+        except OSError:
+            pass
 
 
 async def _probe_method(endpoint, spec, contract: str, method: str, timeout: float) -> MethodResult:
