@@ -47,6 +47,18 @@ or point `stacks/local-only.toml` at a reachable OpenAI-compatible server (Ollam
 vLLM, LM Studio). With every provider variable unset, the kernel and the full hermetic test suite
 still pass — model-agnosticism is structural.
 
+## Verifying Milestone 1
+
+```bash
+uv run pytest -m "not live"              # hermetic suite
+uv run python scripts/milestone1.py      # walks the eight Milestone 1 criteria, pass/fail each
+```
+
+The eight criteria: swap inference / context / sandbox without touching the kernel; cross-language
+bricks (a TypeScript brick beside Python ones); crash isolation; manifest validation; protocol-only
+communication (`veridian brick conformance --all`); and the kernel running with no provider
+configured.
+
 ## Layout
 
 | Path | What lives there |

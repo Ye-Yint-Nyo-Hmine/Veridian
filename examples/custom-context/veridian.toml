@@ -1,0 +1,15 @@
+name = "example/headline-context"
+version = "0.1.0"
+description = "A custom context strategy: index only the first line / signature of each definition."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["workspace:read"]
+
+[[implements]]
+contract = "context"
+methods = ["index", "retrieve", "invalidate"]

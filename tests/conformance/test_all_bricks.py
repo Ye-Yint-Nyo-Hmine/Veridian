@@ -13,9 +13,12 @@ from veridian.plugin_runtime.loader import discover_with_errors
 
 REPO = Path(__file__).resolve().parents[2]
 BRICKS = REPO / "bricks"
+EXAMPLES = REPO / "examples"
 
 _found, _errors = discover_with_errors(BRICKS)
 BRICK_DIRS = sorted(m.directory for m in _found.values())
+_ex_found, _ex_errors = discover_with_errors(EXAMPLES)
+EXAMPLE_DIRS = sorted(m.directory for m in _ex_found.values())
 
 
 def test_no_manifest_errors_in_bricks_tree():
@@ -24,6 +27,15 @@ def test_no_manifest_errors_in_bricks_tree():
 
 @pytest.mark.parametrize("brick_dir", BRICK_DIRS, ids=lambda p: p.relative_to(BRICKS).as_posix())
 async def test_brick_conforms(brick_dir):
+    await _assert_conforms(brick_dir)
+
+
+@pytest.mark.parametrize("brick_dir", EXAMPLE_DIRS, ids=lambda p: p.relative_to(EXAMPLES).as_posix())
+async def test_example_conforms(brick_dir):
+    await _assert_conforms(brick_dir)
+
+
+async def _assert_conforms(brick_dir):
     report = await run_conformance(brick_dir, timeout=30.0)
     assert report.negotiated, report.problems
     detail = "\n".join(f"{r.contract}.{r.method}: {r.detail}" for r in report.results if not r.ok)

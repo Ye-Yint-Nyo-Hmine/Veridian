@@ -1,0 +1,12 @@
+name = "example/minimal-brick"
+version = "0.1.0"
+description = "The smallest useful brick: one tool, written in TypeScript, no build step."
+protocol = "veridian/1.0"
+runtime = "node"
+
+[spawn]
+command = ["${node}", "--experimental-strip-types", "brick.ts"]
+
+[[implements]]
+contract = "tools"
+methods = ["list", "invoke"]
