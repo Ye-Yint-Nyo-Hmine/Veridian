@@ -15,3 +15,10 @@ wheels/
 # Brick runtime state / conformance probe artifacts
 .veridian/
 _probe*.txt
+
+# Secrets — never commit provider keys or local env overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
