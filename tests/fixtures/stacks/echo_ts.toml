@@ -1,0 +1,9 @@
+[stack]
+name = "echo-ts"
+description = "The TypeScript SDK echo brick, alongside a Python kernel — the cross-language proof."
+
+[policy]
+grant = ["contract:echo"]
+
+[bindings]
+echo = "tests/fixtures/echo/ts"

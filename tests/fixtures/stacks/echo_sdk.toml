@@ -1,0 +1,9 @@
+[stack]
+name = "echo-sdk"
+description = "The SDK-built echo brick, with the grant its roundtrip method needs."
+
+[policy]
+grant = ["contract:echo"]
+
+[bindings]
+echo = "tests/fixtures/echo/sdk"

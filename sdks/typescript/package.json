@@ -1,0 +1,22 @@
+{
+  "name": "@veridian/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript brick SDK for the Veridian runtime. Speaks veridian/1.0 (JSON-RPC 2.0 over NDJSON stdio).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}

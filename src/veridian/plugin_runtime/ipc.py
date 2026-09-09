@@ -17,9 +17,16 @@ class to serve one.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
+
+#: Set for the duration of an inbound request handler so a streaming handler can discover the
+#: request id its deltas must be keyed by (protocol spec section 5).
+current_request_id: contextvars.ContextVar[int | str | None] = contextvars.ContextVar(
+    "veridian_current_request_id", default=None
+)
 
 from veridian.contracts.errors import (
     BRICK_UNAVAILABLE,
@@ -273,6 +280,7 @@ class Endpoint:
         if self._request_handler is None:
             await self._send_error(req_id, METHOD_NOT_FOUND, f"no request handler for {method}")
             return
+        token = current_request_id.set(req_id)
         try:
             result = await self._request_handler(method, params)
         except ProtocolError as exc:
@@ -283,6 +291,8 @@ class Endpoint:
             await self._send_error(req_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
         else:
             await self._safe_send({"jsonrpc": "2.0", "id": req_id, "result": result})
+        finally:
+            current_request_id.reset(token)
 
     async def emit_delta(self, request_id: int | str, contract: str, delta: dict[str, Any]) -> None:
         """Helper for a serving endpoint: send a ``<contract>.delta`` notification for a streaming
