@@ -1,0 +1,26 @@
+[stack]
+name = "local-ollama"
+description = "Local Ollama chat model; no embedding model required."
+
+[policy]
+grant = [
+  "network",
+  "process:spawn",
+  "workspace:read",
+  "workspace:write",
+  "contract:inference",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+]
+
+[bindings]
+inference = { brick = "bricks/inference/local", config = { model = "qwen3.5:4b" } }
+context = "bricks/context/default"
+planner = "bricks/planning/default"
+memory = "bricks/memory/ephemeral"
+sandbox = "bricks/sandbox/local"
+tools = "bricks/tools/filesystem"
+orchestrator = "bricks/orchestrator/default"
