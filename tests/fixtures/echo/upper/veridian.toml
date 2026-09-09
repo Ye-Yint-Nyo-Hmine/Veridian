@@ -1,0 +1,12 @@
+name = "echo/upper"
+version = "1.0.0"
+description = "Echo variant: say returns the text upper-cased. For swap tests."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say", "stream"]

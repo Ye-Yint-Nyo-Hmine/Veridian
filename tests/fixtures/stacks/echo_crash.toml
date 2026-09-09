@@ -1,0 +1,6 @@
+[stack]
+name = "echo-crash"
+description = "Binds a brick that exits mid-request. The kernel must survive and restart it."
+
+[bindings]
+echo = "tests/fixtures/echo/crash_mid_request"

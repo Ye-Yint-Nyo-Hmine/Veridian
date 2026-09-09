@@ -37,6 +37,7 @@ class BrickProcess:
         kill_timeout: float = _DEFAULT_KILL_TIMEOUT,
         on_stderr: StderrSink | None = None,
         on_malformed: MalformedSink | None = None,
+        on_exit: Callable[[int], None] | None = None,
     ) -> None:
         self.name = name
         self.command = command
@@ -45,6 +46,8 @@ class BrickProcess:
         self.kill_timeout = kill_timeout
         self._on_stderr = on_stderr
         self._on_malformed = on_malformed
+        self._on_exit = on_exit
+        self._stopping = False
 
         self._proc: asyncio.subprocess.Process | None = None
         self._stderr_task: asyncio.Task[None] | None = None
@@ -75,8 +78,10 @@ class BrickProcess:
 
     async def _watch_exit(self) -> None:
         assert self._proc is not None
-        await self._proc.wait()
+        code = await self._proc.wait()
         self._exited.set()
+        if self._on_exit is not None and not self._stopping:
+            self._on_exit(code)
 
     async def _drain_stderr(self, stream: asyncio.StreamReader) -> None:
         try:
@@ -114,6 +119,7 @@ class BrickProcess:
 
     async def stop(self) -> int:
         """Terminate, then hard-kill after ``kill_timeout``. Returns the exit code. Idempotent."""
+        self._stopping = True
         if self._proc is None:
             return 0
         if self._proc.returncode is not None:

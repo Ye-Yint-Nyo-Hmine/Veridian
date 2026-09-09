@@ -1,0 +1,9 @@
+[stack]
+name = "echo-roundtrip"
+description = "Brick that calls back through the kernel; policy grants it what it needs."
+
+[policy]
+grant = ["contract:echo", "network"]
+
+[bindings]
+echo = "tests/fixtures/echo/roundtrip"

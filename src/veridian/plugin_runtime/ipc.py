@@ -307,6 +307,9 @@ class Endpoint:
         for fut in list(self._pending.values()):
             if not fut.done():
                 fut.set_exception(exc)
+                # If nothing is awaiting this future any more, make sure the exception is
+                # considered retrieved so asyncio does not log it at GC time.
+                fut.add_done_callback(lambda f: f.cancelled() or f.exception())
         self._pending.clear()
         for stream in list(self._streams.values()):
             stream._finish_err(exc)

@@ -1,0 +1,6 @@
+[stack]
+name = "echo-upper"
+description = "Same shape as echo_ok, different brick bound to the echo contract."
+
+[bindings]
+echo = "tests/fixtures/echo/upper"

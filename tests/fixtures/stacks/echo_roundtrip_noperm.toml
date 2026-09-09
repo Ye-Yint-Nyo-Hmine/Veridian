@@ -1,0 +1,6 @@
+[stack]
+name = "echo-roundtrip-noperm"
+description = "Same brick, but policy grants nothing — host.contract.call must be denied."
+
+[bindings]
+echo = "tests/fixtures/echo/roundtrip"

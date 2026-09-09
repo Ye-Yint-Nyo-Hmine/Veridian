@@ -1,0 +1,6 @@
+[stack]
+name = "echo-ok"
+description = "One well-behaved echo brick."
+
+[bindings]
+echo = "tests/fixtures/echo/ok"
