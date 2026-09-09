@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/common.schema.json",
+  "title": "Veridian common shapes",
+  "description": "Shared payload shapes referenced by contract schemas. Source of truth for Message, ContentBlock, Usage, and ToolSchema.",
+  "$defs": {
+    "Role": {
+      "type": "string",
+      "enum": ["system", "user", "assistant", "tool"]
+    },
+    "TextBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string" }
+      }
+    },
+    "ToolUseBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "name", "input"],
+      "properties": {
+        "type": { "const": "tool_use" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "input": { "type": "object" }
+      }
+    },
+    "ToolResultBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "tool_use_id", "content"],
+      "properties": {
+        "type": { "const": "tool_result" },
+        "tool_use_id": { "type": "string" },
+        "content": { "type": "string" },
+        "is_error": { "type": "boolean" }
+      }
+    },
+    "ContentBlock": {
+      "oneOf": [
+        { "$ref": "#/$defs/TextBlock" },
+        { "$ref": "#/$defs/ToolUseBlock" },
+        { "$ref": "#/$defs/ToolResultBlock" }
+      ]
+    },
+    "Message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "$ref": "#/$defs/Role" },
+        "content": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "$ref": "#/$defs/ContentBlock" } }
+          ]
+        }
+      }
+    },
+    "Usage": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["input_tokens", "output_tokens"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ToolSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "input_schema"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "input_schema": { "type": "object" }
+      }
+    },
+    "StopReason": {
+      "type": "string",
+      "enum": ["stop", "length", "tool_use", "content_filter", "error"]
+    }
+  }
+}

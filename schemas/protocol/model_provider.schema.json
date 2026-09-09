@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/model_provider.schema.json",
+  "title": "model_provider contract",
+  "description": "The raw adapter for exactly one vendor API. An inference engine composes these.",
+  "$defs": {
+    "complete_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messages", "model"],
+      "properties": {
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" }
+        },
+        "model": { "type": "string" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "temperature": { "type": "number", "minimum": 0 },
+        "stop": { "type": "array", "items": { "type": "string" } },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/ToolSchema" }
+        }
+      }
+    },
+    "complete_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "model", "usage", "stop_reason"],
+      "properties": {
+        "message": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" },
+        "model": { "type": "string" },
+        "usage": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage" },
+        "stop_reason": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/StopReason" }
+      }
+    },
+    "embed_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "model"],
+      "properties": {
+        "input": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "model": { "type": "string" }
+      }
+    },
+    "embed_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["embeddings", "model"],
+      "properties": {
+        "embeddings": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } }
+        },
+        "model": { "type": "string" },
+        "usage": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage" }
+      }
+    }
+  }
+}

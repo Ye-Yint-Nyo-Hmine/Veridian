@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/plugin-manifest.schema.json",
+  "title": "Veridian brick manifest",
+  "description": "Parsed from veridian.toml at the root of a brick directory. Declares identity, how to spawn the brick, what contracts it implements, and what capabilities it needs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "protocol", "spawn", "implements"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+    },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "protocol": { "type": "string", "pattern": "^veridian/[0-9]+\\.[0-9]+$" },
+    "runtime": { "type": "string", "enum": ["python", "node", "other"] },
+    "spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "cwd": { "type": "string" }
+      }
+    },
+    "implements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contract", "methods"],
+        "properties": {
+          "contract": { "type": "string" },
+          "methods": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requires": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "env_passthrough": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+    },
+    "optional_dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

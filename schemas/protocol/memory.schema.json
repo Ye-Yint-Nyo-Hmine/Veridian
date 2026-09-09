@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/memory.schema.json",
+  "title": "memory contract",
+  "$defs": {
+    "MemoryRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "content"],
+      "properties": {
+        "id": { "type": "string" },
+        "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "metadata": { "type": "object" },
+        "created_at": { "type": "string" },
+        "score": { "type": "number" }
+      }
+    },
+    "write_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content"],
+      "properties": {
+        "key": { "type": "string" },
+        "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "metadata": { "type": "object" }
+      }
+    },
+    "write_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": { "id": { "type": "string" } }
+    },
+    "read_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": { "id": { "type": "string" } }
+    },
+    "read_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record"],
+      "properties": {
+        "record": {
+          "oneOf": [
+            { "$ref": "#/$defs/MemoryRecord" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "search_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string" },
+        "k": { "type": "integer", "minimum": 1 },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "search_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["results"],
+      "properties": {
+        "results": { "type": "array", "items": { "$ref": "#/$defs/MemoryRecord" } }
+      }
+    },
+    "forget_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "forget_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forgotten"],
+      "properties": { "forgotten": { "type": "integer", "minimum": 0 } }
+    }
+  }
+}

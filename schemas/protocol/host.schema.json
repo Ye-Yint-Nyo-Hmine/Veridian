@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/host.schema.json",
+  "title": "Veridian host services (brick -> kernel)",
+  "$defs": {
+    "log_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "message"],
+      "properties": {
+        "level": { "type": "string", "enum": ["debug", "info", "warning", "error"] },
+        "message": { "type": "string" },
+        "fields": { "type": "object" }
+      }
+    },
+    "event_emit_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "payload": {}
+      }
+    },
+    "event_emit_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "permission_request_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability"],
+      "properties": {
+        "capability": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "permission_request_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["granted"],
+      "properties": {
+        "granted": { "type": "boolean" }
+      }
+    },
+    "contract_call_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "method", "params"],
+      "properties": {
+        "contract": { "type": "string" },
+        "method": { "type": "string" },
+        "params": { "type": "object" }
+      }
+    },
+    "contract_call_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result"],
+      "properties": {
+        "result": {}
+      }
+    }
+  }
+}

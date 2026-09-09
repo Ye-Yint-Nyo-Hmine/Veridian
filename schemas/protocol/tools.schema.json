@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/tools.schema.json",
+  "title": "tools contract",
+  "$defs": {
+    "list_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "list_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tools"],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/ToolSchema" }
+        }
+      }
+    },
+    "invoke_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "input"],
+      "properties": {
+        "name": { "type": "string" },
+        "input": { "type": "object" }
+      }
+    },
+    "invoke_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output"],
+      "properties": {
+        "output": { "type": "string" },
+        "is_error": { "type": "boolean" }
+      }
+    }
+  }
+}

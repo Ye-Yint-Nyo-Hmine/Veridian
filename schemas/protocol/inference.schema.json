@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/inference.schema.json",
+  "title": "inference contract",
+  "description": "A strategy that produces an assistant turn. May compose model_provider bricks via host.contract.call. The kernel knows only that something implements this contract.",
+  "$defs": {
+    "generate_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["messages"],
+      "properties": {
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" }
+        },
+        "model": { "type": "string" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "temperature": { "type": "number", "minimum": 0 },
+        "stop": { "type": "array", "items": { "type": "string" } },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/ToolSchema" }
+        }
+      }
+    },
+    "generate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "model", "usage", "stop_reason"],
+      "properties": {
+        "message": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" },
+        "model": { "type": "string" },
+        "usage": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage" },
+        "stop_reason": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/StopReason" }
+      }
+    },
+    "generate_stream_params": { "$ref": "#/$defs/generate_params" },
+    "generate_stream_result": { "$ref": "#/$defs/generate_result" },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "delta"],
+      "properties": {
+        "request_id": { "$ref": "https://veridian.dev/schemas/protocol/envelope.schema.json#/$defs/Id" },
+        "delta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["text", "tool_use", "stop"] },
+            "text": { "type": "string" },
+            "tool_use": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/ToolUseBlock" },
+            "stop_reason": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/StopReason" }
+          }
+        }
+      }
+    },
+    "models_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "models_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models"],
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "context_window": { "type": "integer", "minimum": 1 },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

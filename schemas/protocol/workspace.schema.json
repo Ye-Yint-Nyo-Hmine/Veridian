@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/workspace.schema.json",
+  "title": "workspace contract",
+  "$defs": {
+    "Entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type"],
+      "properties": {
+        "path": { "type": "string" },
+        "type": { "type": "string", "enum": ["file", "dir"] },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "read_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": { "path": { "type": "string" } }
+    },
+    "read_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content", "encoding", "bytes"],
+      "properties": {
+        "path": { "type": "string" },
+        "content": { "type": "string" },
+        "encoding": { "type": "string", "enum": ["utf-8", "base64"] },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "write_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content"],
+      "properties": {
+        "path": { "type": "string" },
+        "content": { "type": "string" },
+        "encoding": { "type": "string", "enum": ["utf-8", "base64"] }
+      }
+    },
+    "write_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes_written"],
+      "properties": {
+        "path": { "type": "string" },
+        "bytes_written": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "list_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "recursive": { "type": "boolean" },
+        "glob": { "type": "string" }
+      }
+    },
+    "list_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries"],
+      "properties": {
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/Entry" } }
+      }
+    },
+    "stat_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": { "path": { "type": "string" } }
+    },
+    "stat_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type", "size"],
+      "properties": {
+        "path": { "type": "string" },
+        "type": { "type": "string", "enum": ["file", "dir"] },
+        "size": { "type": "integer", "minimum": 0 },
+        "modified_at": { "type": "string" }
+      }
+    }
+  }
+}

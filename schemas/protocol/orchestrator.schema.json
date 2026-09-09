@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/orchestrator.schema.json",
+  "title": "orchestrator contract",
+  "description": "Drives the whole agent loop through host.contract.call. Because it is a brick, replacing it replaces the agent architecture.",
+  "$defs": {
+    "run_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "workspace_root"],
+      "properties": {
+        "goal": { "type": "string" },
+        "workspace_root": { "type": "string" },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_iterations": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "run_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "iterations", "summary"],
+      "properties": {
+        "status": { "type": "string", "enum": ["completed", "failed", "max_iterations"] },
+        "iterations": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string" }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "event", "data"],
+      "properties": {
+        "request_id": { "$ref": "https://veridian.dev/schemas/protocol/envelope.schema.json#/$defs/Id" },
+        "event": { "type": "string", "enum": ["step", "tool", "message", "log"] },
+        "data": { "type": "object" }
+      }
+    }
+  }
+}

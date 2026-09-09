@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/lifecycle.schema.json",
+  "title": "Veridian lifecycle methods",
+  "$defs": {
+    "initialize_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "capabilities", "workspace_root", "config"],
+      "properties": {
+        "protocol_version": { "type": "string" },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "workspace_root": { "type": "string" },
+        "config": { "type": "object" }
+      }
+    },
+    "initialize_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "brick", "ready"],
+      "properties": {
+        "protocol_version": { "type": "string" },
+        "brick": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" }
+          }
+        },
+        "ready": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "capabilities_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "capabilities_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contracts"],
+      "properties": {
+        "contracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "methods"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "methods": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "ping_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "nonce": { "type": "string" } }
+    },
+    "ping_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "nonce": { "type": "string" } }
+    },
+    "shutdown_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "shutdown_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  }
+}

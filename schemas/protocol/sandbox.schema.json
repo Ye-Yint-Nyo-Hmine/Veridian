@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/sandbox.schema.json",
+  "title": "sandbox contract",
+  "$defs": {
+    "Command": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ]
+    },
+    "exec_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": { "$ref": "#/$defs/Command" },
+        "cwd": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "stdin": { "type": "string" },
+        "timeout_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "exec_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exit_code", "stdout", "stderr", "timed_out"],
+      "properties": {
+        "exit_code": { "type": "integer" },
+        "stdout": { "type": "string" },
+        "stderr": { "type": "string" },
+        "timed_out": { "type": "boolean" },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "spawn_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": { "$ref": "#/$defs/Command" },
+        "cwd": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timeout_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "spawn_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle"],
+      "properties": { "handle": { "type": "string" } }
+    },
+    "write_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content"],
+      "properties": {
+        "path": { "type": "string" },
+        "content": { "type": "string" },
+        "encoding": { "type": "string", "enum": ["utf-8", "base64"] }
+      }
+    },
+    "write_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes_written"],
+      "properties": { "bytes_written": { "type": "integer", "minimum": 0 } }
+    },
+    "kill_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle"],
+      "properties": { "handle": { "type": "string" } }
+    },
+    "kill_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["killed"],
+      "properties": { "killed": { "type": "boolean" } }
+    },
+    "reset_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "reset_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  }
+}

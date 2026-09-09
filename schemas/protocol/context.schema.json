@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/context.schema.json",
+  "title": "context contract",
+  "$defs": {
+    "index_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "index_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indexed"],
+      "properties": {
+        "indexed": { "type": "integer", "minimum": 0 },
+        "took_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "retrieve_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string" },
+        "k": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "retrieve_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunks"],
+      "properties": {
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "text", "score"],
+            "properties": {
+              "path": { "type": "string" },
+              "span": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 0 },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "text": { "type": "string" },
+              "score": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "invalidate_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "invalidate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invalidated"],
+      "properties": {
+        "invalidated": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

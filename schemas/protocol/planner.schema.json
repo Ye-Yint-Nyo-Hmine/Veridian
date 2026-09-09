@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/planner.schema.json",
+  "title": "planner contract",
+  "$defs": {
+    "Step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "done", "failed", "skipped"] }
+      }
+    },
+    "plan_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal"],
+      "properties": {
+        "goal": { "type": "string" },
+        "context": { "type": "object" }
+      }
+    },
+    "plan_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "steps"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/Step" } }
+      }
+    },
+    "next_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "observations": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "next_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step"],
+      "properties": {
+        "step": {
+          "oneOf": [
+            { "$ref": "#/$defs/Step" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "is_complete_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": { "plan_id": { "type": "string" } }
+    },
+    "is_complete_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete"],
+      "properties": {
+        "complete": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

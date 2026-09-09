@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/configuration.schema.json",
+  "title": "Veridian stack configuration",
+  "description": "Parsed from a stack TOML file. Binds each contract to a brick and sets policy. The kernel loads exactly one stack per run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stack", "bindings"],
+  "properties": {
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "grant": { "type": "array", "items": { "type": "string" } },
+        "deny": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["brick"],
+            "properties": {
+              "brick": { "type": "string" },
+              "disabled": { "type": "boolean" },
+              "config": { "type": "object" },
+              "grant": { "type": "array", "items": { "type": "string" } },
+              "deny": { "type": "array", "items": { "type": "string" } },
+              "env": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
