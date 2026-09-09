@@ -1,0 +1,12 @@
+name = "echo/garbage-forever"
+version = "1.0.0"
+description = "Floods stdout with non-JSON. Must trip the consecutive-malformed threshold."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say", "stream"]

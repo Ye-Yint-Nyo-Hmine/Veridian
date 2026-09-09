@@ -1,0 +1,7 @@
+# Deliberately invalid: no [[implements]] table, and protocol is malformed.
+name = "echo/bad-manifest"
+version = "1.0.0"
+protocol = "v1"
+
+[spawn]
+command = []

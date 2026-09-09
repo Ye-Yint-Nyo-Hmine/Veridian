@@ -1,0 +1,12 @@
+name = "echo/capability-liar"
+version = "1.0.0"
+description = "Manifest declares an echo.secret method that plugin.capabilities never reports."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say", "stream", "secret"]

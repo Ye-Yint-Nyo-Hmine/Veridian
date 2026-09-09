@@ -1,0 +1,12 @@
+name = "echo/garbage-then-recovers"
+version = "1.0.0"
+description = "Writes non-JSON lines to stdout, then a valid response. Tests quarantine + recovery."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say", "stream"]

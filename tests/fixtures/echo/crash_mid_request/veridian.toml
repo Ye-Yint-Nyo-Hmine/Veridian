@@ -1,0 +1,12 @@
+name = "echo/crash-mid-request"
+version = "1.0.0"
+description = "Exits the process while handling echo.say, without responding."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say", "stream"]
