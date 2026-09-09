@@ -1,0 +1,20 @@
+name = "inference/local"
+version = "0.1.0"
+description = "The OpenAI-compatible adapter pointed at a local server (Ollama, llama.cpp, vLLM, LM Studio)."
+protocol = "veridian/1.0"
+runtime = "python"
+env_passthrough = ["OPENAI_API_KEY", "VERIDIAN_LOCAL_BASE_URL", "OPENAI_BASE_URL"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "generate_stream", "models"]
+
+[[implements]]
+contract = "model_provider"
+methods = ["complete", "embed"]

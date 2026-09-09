@@ -1,0 +1,16 @@
+name = "inference/anthropic"
+version = "0.1.0"
+description = "Anthropic Messages API. Implements the inference contract."
+protocol = "veridian/1.0"
+runtime = "python"
+env_passthrough = ["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "generate_stream", "models"]

@@ -21,6 +21,11 @@ dev = [
     "pytest>=8.1",
     "pytest-asyncio>=0.23",
 ]
+# Real provider SDKs, needed only to run the inference bricks (and their live tests).
+providers = [
+    "anthropic>=0.40",
+    "openai>=1.40",
+]
 
 [project.scripts]
 veridian = "veridian.cli.main:app"

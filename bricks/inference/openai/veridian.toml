@@ -1,0 +1,20 @@
+name = "inference/openai"
+version = "0.1.0"
+description = "OpenAI-compatible chat completions and embeddings. Implements both inference and model_provider."
+protocol = "veridian/1.0"
+runtime = "python"
+env_passthrough = ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "generate_stream", "models"]
+
+[[implements]]
+contract = "model_provider"
+methods = ["complete", "embed"]

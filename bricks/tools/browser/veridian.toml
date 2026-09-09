@@ -3,15 +3,14 @@ version = "0.1.0"
 description = "Headless browser tools. Playwright is an optional dependency; reports unavailable if absent."
 protocol = "veridian/1.0"
 runtime = "python"
+optional_dependencies = ["playwright"]
 
 [spawn]
 command = ["${python}", "brick.py"]
 
-[[implements]]
-contract = "tools"
-methods = ["list", "invoke"]
-
 [capabilities]
 requires = ["network"]
 
-optional_dependencies = ["playwright"]
+[[implements]]
+contract = "tools"
+methods = ["list", "invoke"]

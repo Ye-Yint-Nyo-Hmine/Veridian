@@ -1,0 +1,16 @@
+name = "inference/routing"
+version = "0.1.0"
+description = "Routes each request to one of several real providers by rule. The multi-model demonstration."
+protocol = "veridian/1.0"
+runtime = "python"
+env_passthrough = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "VERIDIAN_LOCAL_BASE_URL"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "generate_stream", "models"]
