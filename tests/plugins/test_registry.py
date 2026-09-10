@@ -10,10 +10,13 @@ from veridian.plugin_runtime.process import BrickProcess, base_env
 from veridian.plugin_runtime.registry import (
     BrickHandle,
     PluginRegistry,
+    check_environment_resolved,
     cross_check_capabilities,
     parse_capabilities_result,
 )
-from tests.fixtures import ECHO_ROOT
+from tests.fixtures import ECHO_ROOT, FIXTURE_ROOT
+
+_DEPS_ROOT = FIXTURE_ROOT / "deps"
 
 
 def test_cross_check_passes_when_capabilities_cover_manifest():
@@ -32,6 +35,18 @@ def test_cross_check_fails_on_missing_contract():
     m = load_manifest(ECHO_ROOT / "ok")
     with pytest.raises(ProtocolError):
         cross_check_capabilities(m, {"something_else": ["x"]})
+
+
+def test_environment_check_passes_for_a_brick_with_no_dependencies():
+    check_environment_resolved(load_manifest(ECHO_ROOT / "ok"))  # no [dependencies] -> "n/a"
+
+
+def test_environment_check_refuses_a_declared_but_uninstalled_brick():
+    m = load_manifest(_DEPS_ROOT / "uninstalled")  # declares six==1.15.0, never installed
+    with pytest.raises(ProtocolError) as ei:
+        check_environment_resolved(m)
+    assert ei.value.code == INVALID_MANIFEST
+    assert ei.value.data == {"brick": "deps/uninstalled", "environment": "missing"}
 
 
 async def test_registry_refuses_to_bind_a_liar(tmp_path):

@@ -13,7 +13,7 @@ The full picture lives in [`/ARCHITECTURE.md`](../../ARCHITECTURE.md). This page
 - **SDKs** (`src/veridian/sdk/`, `sdks/typescript/`) — thin brick-author libraries.
 - **Bricks** (`bricks/`) — a directory + manifest + spawn command per subsystem implementation.
 
-Data flow for one `veridian run`:
+Data flow for one goal (interactive `uv run veridian`, or one-shot `veridian run`):
 
 1. CLI loads a stack, starts the `Kernel`, calls `orchestrator.run` (streaming).
 2. The orchestrator brick calls `context.retrieve`, `planner.plan`, `inference.generate`,

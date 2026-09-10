@@ -32,9 +32,16 @@ def _pytest(*node_ids: str, marker: str | None = None) -> tuple[bool | str, str]
 # -- A1: per-brick dependency isolation --------------------------------------------
 
 def a1_dependency_isolation():
+    # The enforcement half is hermetic: a brick that declares dependencies with no valid
+    # environment is refused at spawn, never silently run against the kernel interpreter.
+    ok_enforce, t_enforce = _pytest(
+        "tests/kernel/test_env_enforcement.py",
+        "tests/plugins/test_environments.py",
+    )
     if not shutil.which("uv"):
-        return SKIP, "uv not on PATH"
-    return _pytest("tests/plugins/test_dependency_isolation.py", marker="install")
+        return (SKIP if ok_enforce else False), f"uv not on PATH; enforcement: {t_enforce}"
+    ok_iso, t_iso = _pytest("tests/plugins/test_dependency_isolation.py", marker="install")
+    return ok_enforce and ok_iso, f"enforcement: {t_enforce} | isolation: {t_iso}"
 
 
 CRITERIA = [

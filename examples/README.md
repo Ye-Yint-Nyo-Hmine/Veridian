@@ -26,4 +26,4 @@ Then bind it, e.g. in a copy of `stacks/default.toml`:
 memory = "examples/custom-memory"
 ```
 
-and run the same `veridian run` — nothing else changes.
+and start the same `uv run veridian` — nothing else changes.

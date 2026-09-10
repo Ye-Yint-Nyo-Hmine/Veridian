@@ -1,9 +1,16 @@
-"""The contract -> brick binding table, and the check that a brick does not lie about itself.
+"""The contract -> brick binding table, and the checks that a brick does not lie about itself or
+run against the wrong dependencies.
 
 The registry cross-checks the manifest's declared ``implements`` against what
 ``plugin.capabilities`` actually returns and refuses the binding on a mismatch. A brick whose
 manifest claims a contract method its running code does not report is rejected with
 ``invalid_manifest`` (-32007) before anything is bound to it.
+
+It also refuses to bind a brick that declares a ``[dependencies]`` table but has no private
+environment matching its manifest (never installed, or the recorded environment is stale). Such
+a brick would otherwise run against whatever packages the kernel happens to have — the exact
+failure per-brick dependency isolation exists to prevent — so the binding is rejected here rather
+than silently allowed. (A3 will enforce manifest-declared egress at this same seam.)
 """
 
 from __future__ import annotations
@@ -11,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from veridian.contracts.errors import INVALID_MANIFEST, ProtocolError
+from veridian.plugin_runtime.environments import environment_status
 from veridian.plugin_runtime.ipc import Endpoint
 from veridian.plugin_runtime.manifest import Manifest
 from veridian.plugin_runtime.process import BrickProcess
@@ -50,6 +58,23 @@ def cross_check_capabilities(manifest: Manifest, reported: dict[str, list[str]])
         )
 
 
+def check_environment_resolved(manifest: Manifest) -> None:
+    """Raise ``invalid_manifest`` if the brick declares ``[dependencies]`` but has no private
+    environment matching its manifest. ``environment_status`` returns ``"n/a"`` for a brick with
+    no dependency table (always fine) and ``"ok"`` once ``veridian brick install`` has resolved
+    one; ``"missing"`` and ``"stale"`` are refused."""
+    status = environment_status(manifest)
+    if status in ("missing", "stale"):
+        detail = "was never installed" if status == "missing" else "no longer matches its manifest"
+        raise ProtocolError(
+            INVALID_MANIFEST,
+            f"{manifest.name}: declares [dependencies] but its private environment {detail} "
+            f"({status}); run `veridian brick install {manifest.name}` "
+            f"(refusing to fall back to the kernel interpreter)",
+            {"brick": manifest.name, "environment": status},
+        )
+
+
 def parse_capabilities_result(result: dict) -> dict[str, list[str]]:
     return {c["name"]: list(c["methods"]) for c in result.get("contracts", [])}
 
@@ -65,6 +90,7 @@ class PluginRegistry:
                 INVALID_MANIFEST,
                 f"cannot bind {handle.name} to {contract!r}: its manifest does not implement it",
             )
+        check_environment_resolved(handle.manifest)
         cross_check_capabilities(handle.manifest, handle.reported_contracts)
         self._by_contract[contract] = handle
         self._by_name[handle.name] = handle

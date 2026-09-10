@@ -17,6 +17,27 @@ from veridian.contracts.errors import INVALID_MANIFEST, ProtocolError
 
 MANIFEST_FILENAME = "veridian.toml"
 
+
+class UnresolvedEnvironment(RuntimeError):
+    """A brick declares a ``[dependencies]`` table but has no private environment that matches it:
+    it was never installed (``missing``) or the recorded environment no longer matches the
+    manifest / has lost its interpreter (``stale``).
+
+    Raised instead of silently falling back to the kernel's interpreter. A brick that pins
+    ``six==1.15.0`` and shares whatever the kernel happens to have is precisely the failure
+    dependency isolation exists to prevent, so the fall-back is reserved for bricks that declare
+    no dependencies at all.
+    """
+
+    def __init__(self, brick: str, status: str) -> None:
+        self.brick = brick
+        self.status = status  # "missing" | "stale"
+        super().__init__(
+            f"{brick}: declares [dependencies] but its private environment is {status}; "
+            f"run `veridian brick install {brick}` "
+            f"(refusing to fall back to the kernel interpreter)"
+        )
+
 # Where `veridian brick install` records a brick's resolved private environment. Kept inside the
 # brick directory (already git-ignored) so the environment travels with the brick and nothing
 # central has to be consulted at spawn time.
@@ -72,21 +93,44 @@ class Manifest:
         except (OSError, json.JSONDecodeError):
             return None
 
+    def environment_state(self) -> str:
+        """``"n/a"`` (no dependencies), ``"ok"`` (installed and current), ``"missing"`` (declared
+        but never installed), or ``"stale"`` (installed against a different dependency table, or
+        the recorded interpreter is gone). :func:`environments.environment_status` is the public
+        entry point and delegates here."""
+        if not self.needs_isolated_env():
+            return "n/a"
+        record = self.load_env_record()
+        if not record:
+            return "missing"
+        if record.get("fingerprint") != dependency_fingerprint(self.dependencies):
+            return "stale"
+        if record.get("runtime") == "python":
+            interp = record.get("interpreter")
+            if not interp or not Path(interp).exists():
+                return "stale"
+        return "ok"
+
     def resolved_interpreter(self) -> str:
-        """The interpreter ``${python}`` expands to for *this* brick. A brick with a private
-        environment whose fingerprint still matches its manifest gets that venv's python; every
-        other brick (no dependencies, or a stale/absent record) gets the kernel's own interpreter,
-        exactly as in Milestone 1."""
+        """The interpreter ``${python}`` expands to for *this* brick.
+
+        * A brick with **no** ``[dependencies]`` table gets the kernel's own interpreter, exactly
+          as in Milestone 1.
+        * A brick with a private environment whose fingerprint still matches its manifest gets
+          that venv's python.
+        * A brick that declares dependencies but has no matching environment
+          (``missing``/``stale``) raises :class:`UnresolvedEnvironment` rather than silently
+          borrowing the kernel's interpreter.
+        """
         if not self.needs_isolated_env():
             return sys.executable
-        record = self.load_env_record()
-        if not record or record.get("runtime") != "python":
-            return sys.executable
-        if record.get("fingerprint") != dependency_fingerprint(self.dependencies):
-            return sys.executable
-        interp = record.get("interpreter")
-        if interp and Path(interp).exists():
-            return interp
+        state = self.environment_state()
+        if state != "ok":
+            raise UnresolvedEnvironment(self.name, state)
+        record = self.load_env_record() or {}
+        if record.get("runtime") == "python":
+            return record["interpreter"]
+        # A non-python isolated env (node): its spawn command drives ${node}, not ${python}.
         return sys.executable
 
     def resolved_command(self) -> list[str]:

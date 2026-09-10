@@ -40,10 +40,10 @@ this.
 | `transport.py` | Framing only. `Transport` ABC + `StdioTransport` (NDJSON). Future socket/pipe/remote transports subclass it. |
 | `ipc.py` | The JSON-RPC 2.0 codec: request/response correlation, per-call timeouts, `call_stream` with request-id-keyed delta routing, background inbound dispatch, malformed-line quarantine with a crash threshold. Peer-symmetric — the SDK uses the same `Endpoint`. |
 | `process.py` | `BrickProcess` over `asyncio.create_subprocess_exec`. `terminate()` then hard `kill()` after a timeout — no POSIX signals. `stderr` drained line-by-line to a sink, never parsed. Environment scrubbed to an allowlist. |
-| `manifest.py` | Parse + schema-validate `veridian.toml` → frozen `Manifest`. Resolves `${python}` per brick: a brick with a `[dependencies]` table and an installed environment gets its private venv, every other brick gets the kernel's interpreter. |
+| `manifest.py` | Parse + schema-validate `veridian.toml` → frozen `Manifest`. Resolves `${python}` per brick: a brick with a `[dependencies]` table and an installed environment gets its private venv; a brick with no `[dependencies]` gets the kernel's interpreter; a brick that declares dependencies with no matching environment raises `UnresolvedEnvironment` (refused at spawn) rather than silently sharing the kernel's. |
 | `environments.py` | `veridian brick install` — resolve a brick's `[dependencies]` into a private venv (`uv`) or local `node_modules` (`npm`) and record it in `.veridian/environment.json`, fingerprinted against the manifest. |
 | `loader.py` | Discover bricks (`discover` / `discover_with_errors`); resolve a stack reference by path or manifest name. |
-| `registry.py` | The contract → brick binding table + `cross_check_capabilities`: a brick whose manifest claims a contract method its running code doesn't report is refused. |
+| `registry.py` | The contract → brick binding table + `cross_check_capabilities` (a brick whose manifest claims a contract method its running code doesn't report is refused) + `check_environment_resolved` (a brick that declares `[dependencies]` with no matching private environment is refused rather than run against the kernel's packages). |
 
 ## Security (`src/veridian/security/`)
 

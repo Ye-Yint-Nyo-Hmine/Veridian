@@ -31,15 +31,24 @@ def list_() -> None:
     """List every brick under bricks/."""
     found, errors = discover_with_errors(bricks_root())
     table = Table("brick", "contracts", "runtime", "requires", "env")
+    unresolved: list[tuple[str, str]] = []
     for name, m in sorted(found.items()):
+        status = environment_status(m)
+        if status in ("missing", "stale"):
+            unresolved.append((name, status))
         table.add_row(
             name,
             ", ".join(sorted(m.implements)),
             m.runtime,
             ", ".join(m.requires) or "-",
-            environment_status(m),
+            status,
         )
     console.print(table)
+    for name, status in unresolved:
+        err_console.print(
+            f"[yellow]warning[/] {name}: environment is [bold]{status}[/] — refused at spawn "
+            f"until `veridian brick install {name}`"
+        )
     for path, exc in errors:
         err_console.print(f"[red]invalid[/] {path}: {exc}")
 
@@ -56,8 +65,15 @@ def inspect(ref: str) -> None:
     console.print(f"requires: {m.requires or '-'}")
     console.print(f"env passthrough: {m.env_passthrough or '-'}")
     if m.needs_isolated_env():
-        console.print(f"dependencies: {m.dependencies}  [dim](environment: {environment_status(m)})[/]")
-        console.print(f"interpreter: {m.resolved_interpreter()}")
+        status = environment_status(m)
+        console.print(f"dependencies: {m.dependencies}  [dim](environment: {status})[/]")
+        if status == "ok":
+            console.print(f"interpreter: {m.resolved_interpreter()}")
+        else:
+            err_console.print(
+                f"[yellow]warning[/] environment is [bold]{status}[/] — this brick will be "
+                f"refused at spawn; run `veridian brick install {m.name}`"
+            )
     a = assess(m)
     console.print(f"trust: [bold]{a.level.name}[/] — {a.advisory}")
 

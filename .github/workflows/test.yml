@@ -25,6 +25,22 @@ jobs:
           ANTHROPIC_API_KEY: ""
           OPENAI_API_KEY: ""
 
+  install:
+    # Per-brick dependency isolation (Milestone 2 / A1): resolves real brick environments with
+    # `uv` over the network, so it runs as its own job rather than in the hermetic matrix.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --extra dev
+      - name: Dependency-isolation suite (resolves real environments with uv)
+        run: uv run pytest -m install
+        env:
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
+
   live:
     # Manually triggered only. Uses repository secrets.
     if: github.event_name == 'workflow_dispatch'

@@ -14,7 +14,11 @@ from pathlib import Path
 import pytest
 
 from veridian.plugin_runtime.environments import environment_status, resolve_environment
-from veridian.plugin_runtime.manifest import dependency_fingerprint, load_manifest
+from veridian.plugin_runtime.manifest import (
+    UnresolvedEnvironment,
+    dependency_fingerprint,
+    load_manifest,
+)
 
 _NO_DEPS = """\
 name = "t/plain"
@@ -55,12 +59,17 @@ def test_plain_brick_needs_no_env_and_uses_kernel_interpreter(tmp_path):
     assert resolve_environment(m).action == "skipped"
 
 
-def test_declared_deps_without_install_fall_back_and_report_missing(tmp_path):
+def test_declared_deps_without_install_is_refused_not_silently_shared(tmp_path):
     m = load_manifest(_brick(tmp_path, _WITH_DEPS))
     assert m.needs_isolated_env()
     assert environment_status(m) == "missing"
-    # graceful: a declared-but-uninstalled brick still launches under the kernel interpreter
-    assert m.resolved_interpreter() == sys.executable
+    # A declared-but-uninstalled brick must NOT borrow the kernel's interpreter: that is the
+    # silent dependency-isolation bypass this path exists to close.
+    with pytest.raises(UnresolvedEnvironment) as ei:
+        m.resolved_interpreter()
+    assert ei.value.status == "missing"
+    with pytest.raises(UnresolvedEnvironment):
+        m.resolved_command()
 
 
 def test_matching_env_record_is_used(tmp_path):
@@ -87,7 +96,10 @@ def test_stale_fingerprint_is_ignored(tmp_path):
         "interpreter": sys.executable,
     }), encoding="utf-8")
     assert environment_status(m) == "stale"
-    assert m.resolved_interpreter() == sys.executable  # fell back, did not trust the stale venv
+    # did not trust the stale venv — and did not quietly fall back to the kernel either
+    with pytest.raises(UnresolvedEnvironment) as ei:
+        m.resolved_interpreter()
+    assert ei.value.status == "stale"
 
 
 def test_missing_interpreter_path_is_ignored(tmp_path):
@@ -100,4 +112,5 @@ def test_missing_interpreter_path_is_ignored(tmp_path):
         "interpreter": str(tmp_path / "nope" / "python.exe"),
     }), encoding="utf-8")
     assert environment_status(m) == "stale"
-    assert m.resolved_interpreter() == sys.executable
+    with pytest.raises(UnresolvedEnvironment):
+        m.resolved_interpreter()

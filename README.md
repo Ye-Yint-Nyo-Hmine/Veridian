@@ -39,10 +39,15 @@ See [`ROADMAP.md`](ROADMAP.md).
 uv sync --extra dev
 uv run veridian doctor
 uv run veridian stack validate stacks/default.toml
-uv run veridian run "add a docstring to the top-level function and run the tests"
+uv run veridian                       # interactive session — type a goal, Ctrl-D to exit
 ```
 
-`veridian run` needs at least one inference provider. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`,
+`uv run veridian` starts the interactive session: it prints the active stack and workspace, takes
+a goal at the prompt, and streams the orchestrator's plan, steps, tool calls, and output. For a
+one-shot / scriptable run, `uv run veridian run "add a docstring and run the tests"` does the same
+for a single goal and exits with a status code.
+
+Either form needs at least one inference provider. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`,
 or point `stacks/local-only.toml` at a reachable OpenAI-compatible server (Ollama, llama.cpp,
 vLLM, LM Studio). With every provider variable unset, the kernel and the full hermetic test suite
 still pass — model-agnosticism is structural.

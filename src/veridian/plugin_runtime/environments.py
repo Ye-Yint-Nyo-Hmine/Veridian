@@ -68,19 +68,14 @@ def _run(cmd: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProc
 
 def environment_status(manifest: Manifest) -> str:
     """``"n/a"`` (no dependencies), ``"ok"`` (installed and current), ``"missing"`` (declared but
-    never installed), or ``"stale"`` (installed against a different dependency table)."""
-    if not manifest.needs_isolated_env():
-        return "n/a"
-    record = manifest.load_env_record()
-    if not record:
-        return "missing"
-    if record.get("fingerprint") != dependency_fingerprint(manifest.dependencies):
-        return "stale"
-    if record.get("runtime") == "python":
-        interp = record.get("interpreter")
-        if not interp or not Path(interp).exists():
-            return "stale"
-    return "ok"
+    never installed), or ``"stale"`` (installed against a different dependency table, or the
+    recorded interpreter is gone).
+
+    This is the same computation :meth:`Manifest.resolved_interpreter` refuses to spawn on: any
+    value other than ``n/a`` / ``ok`` for a dependency-declaring brick means the kernel would
+    otherwise be running that brick's code against the wrong packages.
+    """
+    return manifest.environment_state()
 
 
 def resolve_environment(

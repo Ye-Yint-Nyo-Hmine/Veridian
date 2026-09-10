@@ -47,8 +47,15 @@ Declare a `[dependencies]` table and run `veridian brick install <ref>` (or `--a
 brick gets a private venv under `.veridian/venv` resolved with `uv`; a Node brick gets a local
 `node_modules`. The resolved interpreter is recorded in `.veridian/environment.json`, stamped with
 a fingerprint of the dependency table — edit the table and the stale environment is ignored until
-you reinstall. A declared-but-uninstalled brick still launches (under the kernel interpreter);
-`veridian brick list` shows each brick's environment as `n/a` / `missing` / `stale` / `ok`.
+you reinstall.
+
+`veridian brick list` shows each brick's environment as `n/a` / `missing` / `stale` / `ok`, and
+warns for every `missing` / `stale` one. A brick that declares `[dependencies]` but whose
+environment is `missing` or `stale` is **refused before it runs**: `${python}` resolution raises
+rather than returning the kernel interpreter, and the binding table rejects it with
+`invalid_manifest`, so the stack fails to start instead of running the brick against whatever
+packages the kernel happens to have. Bricks with no `[dependencies]` table are unaffected and
+keep launching under the kernel's interpreter.
 
 ## Python
 
