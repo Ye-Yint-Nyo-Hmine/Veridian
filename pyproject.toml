@@ -40,8 +40,9 @@ testpaths = ["tests"]
 markers = [
     "live: tests that require a real inference provider (API key or local server). Deselected by default.",
     "install: tests that resolve real brick environments over the network with uv/npm. Deselected by default.",
+    "container: tests that need a container engine (docker/podman) on PATH. Deselected by default.",
 ]
-addopts = "-m 'not live and not install'"
+addopts = "-m 'not live and not install and not container'"
 
 [tool.uv]
 package = true

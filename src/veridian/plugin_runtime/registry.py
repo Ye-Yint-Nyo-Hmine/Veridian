@@ -75,6 +75,13 @@ def check_environment_resolved(manifest: Manifest) -> None:
         )
 
 
+def check_egress_declared(manifest: Manifest) -> None:
+    """Raise ``invalid_manifest`` if a content-handling brick asks for unrestricted egress. Thin
+    wrapper over :meth:`Manifest.assert_egress_sane`, kept here so ``bind()`` reads as one list of
+    refusals (environment, egress, capabilities)."""
+    manifest.assert_egress_sane()
+
+
 def parse_capabilities_result(result: dict) -> dict[str, list[str]]:
     return {c["name"]: list(c["methods"]) for c in result.get("contracts", [])}
 
@@ -91,6 +98,7 @@ class PluginRegistry:
                 f"cannot bind {handle.name} to {contract!r}: its manifest does not implement it",
             )
         check_environment_resolved(handle.manifest)
+        check_egress_declared(handle.manifest)
         cross_check_capabilities(handle.manifest, handle.reported_contracts)
         self._by_contract[contract] = handle
         self._by_name[handle.name] = handle

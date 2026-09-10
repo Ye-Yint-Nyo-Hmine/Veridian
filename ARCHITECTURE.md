@@ -11,7 +11,7 @@ agent shape.
                     ┌─────▼─────┐
                     │  KERNEL   │  lifecycle · registry · policy · events · config
                     └─────┬─────┘
-                          │  JSON-RPC 2.0 / NDJSON / stdio   (veridian/1.0)
+                          │  JSON-RPC 2.0 / NDJSON / stdio   (veridian/1.1)
         ┌─────────────────┼─────────────────┐
         ▼                 ▼                 ▼
    orchestrator       inference          context
@@ -39,7 +39,7 @@ this.
 |---|---|
 | `transport.py` | Framing only. `Transport` ABC + `StdioTransport` (NDJSON). Future socket/pipe/remote transports subclass it. |
 | `ipc.py` | The JSON-RPC 2.0 codec: request/response correlation, per-call timeouts, `call_stream` with request-id-keyed delta routing, background inbound dispatch, malformed-line quarantine with a crash threshold. Peer-symmetric — the SDK uses the same `Endpoint`. |
-| `process.py` | `BrickProcess` over `asyncio.create_subprocess_exec`. `terminate()` then hard `kill()` after a timeout — no POSIX signals. `stderr` drained line-by-line to a sink, never parsed. Environment scrubbed to an allowlist. |
+| `process.py` | `BrickProcess` over `asyncio.create_subprocess_exec`. `terminate()` then hard `kill()` after a timeout — no POSIX signals. `stderr` drained line-by-line to a sink, never parsed. Environment scrubbed to an allowlist. A `SpawnStrategy` decides the argv/env/cwd: `ProcessSpawn` (a plain subprocess, the default) or `ContainerSpawn` (wraps the brick command in `docker run` / `podman run`, mounts the workspace and the brick, and turns `isolation.network` into `--network none` or an egress allowlist). |
 | `manifest.py` | Parse + schema-validate `veridian.toml` → frozen `Manifest`. Resolves `${python}` per brick: a brick with a `[dependencies]` table and an installed environment gets its private venv; a brick with no `[dependencies]` gets the kernel's interpreter; a brick that declares dependencies with no matching environment raises `UnresolvedEnvironment` (refused at spawn) rather than silently sharing the kernel's. |
 | `environments.py` | `veridian brick install` — resolve a brick's `[dependencies]` into a private venv (`uv`) or local `node_modules` (`npm`) and record it in `.veridian/environment.json`, fingerprinted against the manifest. |
 | `loader.py` | Discover bricks (`discover` / `discover_with_errors`); resolve a stack reference by path or manifest name. |
@@ -48,10 +48,11 @@ this.
 ## Security (`src/veridian/security/`)
 
 Effective capabilities = **what the manifest declares ∩ what policy grants − what policy denies**.
-Enforced at two boundaries: the host-service boundary (`host.contract.call` and friends) and
-process spawn (env scrubbing, working-directory confinement). Milestone 1 does **not** provide
-OS-level network or filesystem isolation — see [`SECURITY.md`](SECURITY.md). That is what the
-sandbox brick and the roadmap's container/WASM modes are for.
+Enforced at the host-service boundary (`host.contract.call` and friends) and at process spawn (env
+scrubbing, working-directory confinement). A brick with `isolation.mode = "container"` adds an
+OS-level boundary on top: it runs inside a container the kernel drives, where `network = false` is
+`--network none` and `allow_hosts` is the only egress. A plain (`process`-mode) brick still has no
+OS-level network or filesystem isolation — see [`SECURITY.md`](SECURITY.md).
 
 ## Bricks (`bricks/`)
 

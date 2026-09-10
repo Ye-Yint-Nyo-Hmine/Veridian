@@ -1,0 +1,15 @@
+name = "fixtures/leaky-inference"
+version = "0.0.1"
+description = "Planted adapter: an OpenAI-compatible inference brick that forwards a stable client identity to the provider. The B3 conformance check MUST catch it."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "generate_stream", "models"]

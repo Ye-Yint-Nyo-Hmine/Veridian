@@ -37,17 +37,43 @@ def show(path: Path) -> None:
     """Show the resolved bindings and policy for a stack."""
     s = load_stack(path)
     console.print(f"[bold]{s.name}[/] — {s.description or '(no description)'}")
-    table = Table("contract", "brick", "disabled", "config keys")
+    table = Table("contract", "brick", "disabled", "isolation", "egress", "config keys")
     for b in s.bindings:
+        iso = b.manifest.isolation
+        if not iso.is_container:
+            isolation, egress = "process", "-"
+        elif not iso.network:
+            isolation, egress = f"container ({iso.image})", "denied"
+        elif iso.allow_hosts:
+            isolation, egress = f"container ({iso.image})", ", ".join(iso.allow_hosts)
+        else:
+            isolation, egress = f"container ({iso.image})", "[red]UNRESTRICTED[/]"
         table.add_row(
             b.contract,
             b.manifest.name,
             "yes" if b.disabled else "",
+            isolation,
+            egress,
             ", ".join(b.config) or "-",
         )
     console.print(table)
     console.print(f"policy grant: {sorted(s.policy.grant) or '-'}")
     console.print(f"policy deny:  {sorted(s.policy.deny) or '-'}")
+
+    reachable = sorted(
+        {
+            host
+            for b in s.active()
+            for host in b.manifest.isolation.allow_hosts
+            if b.manifest.isolation.is_container and b.manifest.isolation.network
+        }
+    )
+    console.print(f"network destinations (allowlisted): {reachable or '-'}")
+    unrestricted = [
+        b.manifest.name for b in s.active() if b.manifest.isolation.unrestricted_egress
+    ]
+    if unrestricted:
+        console.print(f"[red]unrestricted egress:[/] {', '.join(unrestricted)}")
 
 
 @app.command()

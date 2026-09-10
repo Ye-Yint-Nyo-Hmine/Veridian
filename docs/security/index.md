@@ -1,6 +1,8 @@
 # Security
 
 The authoritative statement is [`/SECURITY.md`](../../SECURITY.md). This page summarises the model.
+For the Version 0 privacy boundary — what stays on the device, what reaches a provider, and the
+three limits the design does not claim past — see [`privacy.md`](privacy.md).
 
 ## Capability model
 

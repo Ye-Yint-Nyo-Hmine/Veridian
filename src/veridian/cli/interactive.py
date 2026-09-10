@@ -3,8 +3,10 @@
 One kernel is started lazily on the first goal and reused for the whole session. Each goal is one
 ``orchestrator.run`` streamed through the :class:`Renderer`. The event loop is driven one turn at a
 time so that a Ctrl-C during a run unwinds only that turn: the loop catches ``KeyboardInterrupt``
-out of ``run_until_complete``, cancels the turn task, and returns to the prompt with the kernel
-still up.
+out of ``run_until_complete``, cancels the turn task, sends ``$/cancel`` to the orchestrator via
+the live stream handle, and returns to the prompt with the kernel still up. The kernel cascades
+that cancel down every ``host.contract.call`` the orchestrator made (protocol §5.1), so a Ctrl-C
+mid-generation also stops the downstream model call.
 """
 
 from __future__ import annotations
@@ -93,7 +95,8 @@ def _repl(loop, kernel, resolved, ws, max_iterations, renderer: Renderer) -> Non
             renderer.error(f"unknown command {goal!r} — /help for commands")
             continue
 
-        turn = loop.create_task(_run_goal(kernel, goal, ws, max_iterations, renderer))
+        active = _ActiveTurn()
+        turn = loop.create_task(_run_goal(kernel, goal, ws, max_iterations, renderer, active))
         try:
             loop.run_until_complete(turn)
         except KeyboardInterrupt:
@@ -102,12 +105,27 @@ def _repl(loop, kernel, resolved, ws, max_iterations, renderer: Renderer) -> Non
                 loop.run_until_complete(turn)
             except (asyncio.CancelledError, Exception):  # noqa: BLE001 - turn already reported
                 pass
+            # A4: tell the orchestrator to stop. One cancel on the live stream; the kernel
+            # cascades it down every host.contract.call the run made.
+            if active.stream is not None:
+                try:
+                    loop.run_until_complete(active.stream.cancel())
+                except Exception:  # noqa: BLE001 - orchestrator may already be gone
+                    pass
             renderer.run_interrupted()
-            # SEAM — Milestone 2 A4: when the protocol gains a cancel message, send it to the
-            # orchestrator here so the brick stops instead of running to completion detached.
 
 
-async def _run_goal(kernel: Kernel, goal: str, ws: Path, max_iter: int, renderer: Renderer) -> None:
+class _ActiveTurn:
+    """Mutable handle the REPL shares with the running turn so a Ctrl-C can reach the live stream
+    and send ``$/cancel``."""
+
+    def __init__(self) -> None:
+        self.stream = None
+
+
+async def _run_goal(
+    kernel: Kernel, goal: str, ws: Path, max_iter: int, renderer: Renderer, active: _ActiveTurn
+) -> None:
     if not kernel._started:  # noqa: SLF001
         renderer.info("starting bricks…")
         try:
@@ -123,6 +141,7 @@ async def _run_goal(kernel: Kernel, goal: str, ws: Path, max_iter: int, renderer
             "run",
             {"goal": goal, "workspace_root": str(ws), "limits": {"max_iterations": max_iter}},
         )
+        active.stream = stream
         async for delta in stream:
             renderer.delta(delta.get("event", "?"), delta.get("data", {}))
         renderer.run_end(await stream.result())

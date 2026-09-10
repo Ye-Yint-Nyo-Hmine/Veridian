@@ -26,6 +26,7 @@ BRICK_RESTART_EXHAUSTED = "brick.restart_exhausted"
 BRICK_STOPPED = "brick.stopped"
 CONTRACT_CALL = "contract.call"
 CONTRACT_CALL_FAILED = "contract.call_failed"
+CONTRACT_CALL_CANCELLED = "contract.call_cancelled"
 PERMISSION_DENIED = "permission.denied"
 
 

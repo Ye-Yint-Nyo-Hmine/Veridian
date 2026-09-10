@@ -63,6 +63,39 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "isolation": {
+      "description": "How the kernel spawns this brick and what it may reach from inside. Absent (or mode = \"process\") is the Milestone 1 behaviour: a plain subprocess, the capability model enforced only at the host-service boundary and at spawn. mode = \"container\" runs the brick inside a Docker/Podman container the kernel controls, where `network = false` is an OS-level egress deny and `allow_hosts` is the only way out.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "\"process\" (default) spawns a plain subprocess. \"container\" spawns the brick inside a container via `docker run` / `podman run`, mounting the workspace read-write and the brick directory read-only.",
+          "type": "string",
+          "enum": ["process", "container"]
+        },
+        "image": {
+          "description": "Container image reference. Required when mode = \"container\". Must already carry whatever the brick's spawn command needs (interpreter, SDK); per-brick [dependencies] are not installed into it.",
+          "type": "string"
+        },
+        "engine": {
+          "description": "Container engine. Omit to auto-detect (docker, then podman).",
+          "type": "string",
+          "enum": ["docker", "podman"]
+        },
+        "network": {
+          "description": "Egress switch, enforced at the container boundary (mode = \"container\" only). false (default) is `--network none`: the brick cannot open a socket to anything. true with a non-empty allow_hosts permits only those destinations; true with an empty allow_hosts grants unrestricted egress and is refused for any brick that also touches conversation content.",
+          "type": "boolean"
+        },
+        "allow_hosts": {
+          "description": "Egress allowlist: \"host\" or \"host:port\" entries this brick may reach when network = true. Everything else is refused at the container boundary. This is the list `veridian stack show` enumerates so a stack's whole network surface is auditable from the manifests alone.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+(:[0-9]{1,5})?$"
+          }
+        }
+      }
+    },
     "dependencies": {
       "description": "Third-party packages this brick needs at runtime. When present, the brick is resolved into its own isolated environment on install (a private venv for python, a local node_modules for node) instead of sharing the kernel's interpreter. Bricks with no dependencies table keep running under ${python} / ${node} as before.",
       "type": "object",

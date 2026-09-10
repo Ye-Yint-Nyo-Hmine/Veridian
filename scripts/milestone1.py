@@ -31,17 +31,22 @@ def _cli(*args: str) -> tuple[bool, str]:
     return p.returncode == 0, tail
 
 
+# The evidence for "without touching the kernel" is two-part: the swap test proves one identical
+# Kernel code path runs green for every binding, and test_kernel_never_imports_a_brick proves the
+# kernel holds no compile-time coupling to any brick it routes to.
+_NO_KERNEL_EDIT = "tests/conformance/test_all_bricks.py::test_kernel_never_imports_a_brick"
+
+
 def c1_swap_inference():
-    return _pytest("tests/integration/test_swap.py::test_swap_inference",
-                   "tests/integration/test_swap.py::test_kernel_source_tree_is_unmodified")
+    return _pytest("tests/integration/test_swap.py::test_swap_inference", _NO_KERNEL_EDIT)
 
 
 def c2_swap_context():
-    return _pytest("tests/integration/test_swap.py::test_swap_context")
+    return _pytest("tests/integration/test_swap.py::test_swap_context", _NO_KERNEL_EDIT)
 
 
 def c3_swap_sandbox():
-    return _pytest("tests/integration/test_swap.py::test_swap_sandbox")
+    return _pytest("tests/integration/test_swap.py::test_swap_sandbox", _NO_KERNEL_EDIT)
 
 
 def c4_cross_language():

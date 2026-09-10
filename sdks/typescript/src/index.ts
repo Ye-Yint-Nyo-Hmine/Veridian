@@ -1,8 +1,12 @@
 /**
  * Veridian TypeScript brick SDK.
  *
- * Speaks `veridian/1.0`: JSON-RPC 2.0, one message per NDJSON line, protocol on stdout, logs on
+ * Speaks `veridian/1.1`: JSON-RPC 2.0, one message per NDJSON line, protocol on stdout, logs on
  * stderr. Thin by design — the wire format is defined by the JSON Schemas in `schemas/`, not here.
+ *
+ * Negotiates by major version, so it also talks to a `veridian/1.0` kernel. It does not act on the
+ * `$/cancel` notification (`veridian/1.1`, §5.1) — a cancelled call against a brick built with this
+ * SDK runs to its timeout, which the spec permits.
  *
  * Run a brick with:  node --experimental-strip-types brick.ts
  *
@@ -20,7 +24,21 @@
 
 import * as readline from "node:readline";
 
-export const PROTOCOL_VERSION = "veridian/1.0";
+export const PROTOCOL_VERSION = "veridian/1.1";
+
+/** Major-version token of a `veridian/<major>.<minor>` string, or null if malformed. */
+function protocolMajor(version: unknown): string | null {
+  if (typeof version !== "string" || !version.includes("/")) return null;
+  const [scheme, rest] = version.split("/", 2);
+  if (scheme !== "veridian" || !rest) return null;
+  return rest.split(".")[0] || null;
+}
+
+/** True when `version` shares this SDK's protocol major version (spec §1.1). */
+export function isCompatibleProtocol(version: unknown): boolean {
+  const m = protocolMajor(version);
+  return m !== null && m === protocolMajor(PROTOCOL_VERSION);
+}
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export type Params = Record<string, Json>;
@@ -40,6 +58,7 @@ export const ErrorCode = {
   Timeout: -32006,
   InvalidManifest: -32007,
   ProtocolVersionMismatch: -32008,
+  RequestCancelled: -32009,
 } as const;
 
 export class BrickError extends Error {
@@ -170,6 +189,9 @@ class Endpoint {
     }
     if (msg.method) {
       const params = msg.params ?? {};
+      // $/cancel (veridian/1.1, §5.1): this SDK does not interrupt a running handler, so a
+      // cancelled call runs to its timeout. Swallow the notification rather than surface it.
+      if (msg.method === "$/cancel") return;
       const rid = params["request_id"] as number | string | undefined;
       if (rid !== undefined && this.streams.has(rid)) {
         this.streams.get(rid)!.pushDelta(params);
@@ -297,6 +319,70 @@ export interface RequestContext {
   emitDelta: (delta: Params) => void;
 }
 
+/**
+ * Typed convenience client for the `conversation` contract — local chat history.
+ *
+ * The SDK is otherwise contract-agnostic, but chat history is consumed programmatically by many
+ * bricks (every orchestrator), so a small wrapper over `host.contractCall("conversation", …)`
+ * earns its place. It adds nothing to the wire; the schema in
+ * `schemas/protocol/conversation.schema.json` remains the source of truth.
+ */
+export class Conversation {
+  private host: HostProxy;
+  private defaultSession?: string;
+
+  constructor(host: HostProxy, defaultSession?: string) {
+    this.host = host;
+    this.defaultSession = defaultSession;
+  }
+
+  private sid(sessionId?: string): string {
+    const s = sessionId ?? this.defaultSession;
+    if (!s) throw new Error("no session_id given and no default set on the client");
+    return s;
+  }
+
+  async append(
+    message: Params,
+    opts: { sessionId?: string; metadata?: Params } = {},
+  ): Promise<{ id: string; seq: number }> {
+    const params: Params = { session_id: this.sid(opts.sessionId), message };
+    if (opts.metadata) params["metadata"] = opts.metadata;
+    return (await this.host.contractCall("conversation", "append", params)) as {
+      id: string;
+      seq: number;
+    };
+  }
+
+  async load(
+    opts: { sessionId?: string; limit?: number; beforeSeq?: number } = {},
+  ): Promise<Json[]> {
+    const params: Params = { session_id: this.sid(opts.sessionId) };
+    if (opts.limit !== undefined) params["limit"] = opts.limit;
+    if (opts.beforeSeq !== undefined) params["before_seq"] = opts.beforeSeq;
+    const res = (await this.host.contractCall("conversation", "load", params)) as {
+      messages: Json[];
+    };
+    return res.messages;
+  }
+
+  async listSessions(opts: { limit?: number } = {}): Promise<Json[]> {
+    const params: Params = {};
+    if (opts.limit !== undefined) params["limit"] = opts.limit;
+    const res = (await this.host.contractCall("conversation", "list_sessions", params)) as {
+      sessions: Json[];
+    };
+    return res.sessions;
+  }
+
+  async delete(opts: { sessionId?: string } = {}): Promise<number> {
+    const res = (await this.host.contractCall("conversation", "delete", {
+      session_id: this.sid(opts.sessionId),
+    })) as { deleted: number };
+    return res.deleted;
+  }
+}
+
 export interface BrickDef {
   name: string;
   version: string;
@@ -319,9 +405,9 @@ export function serve(def: BrickDef): Promise<void> {
   return new Promise<void>((resolveServe) => {
     ep.onRequest = async (method: string, params: Params): Promise<Json> => {
       if (method === "plugin.initialize") {
-        if (params["protocol_version"] !== PROTOCOL_VERSION) {
+        if (!isCompatibleProtocol(params["protocol_version"])) {
           throw new BrickError(
-            `${def.name} speaks ${PROTOCOL_VERSION}`,
+            `${def.name} speaks ${PROTOCOL_VERSION}, kernel offered ${String(params["protocol_version"])} (major version must match)`,
             ErrorCode.ProtocolVersionMismatch,
           );
         }

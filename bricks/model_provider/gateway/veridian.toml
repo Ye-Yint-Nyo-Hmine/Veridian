@@ -1,0 +1,16 @@
+name = "model-provider/gateway"
+version = "0.1.0"
+description = "Speaks to a Veridian gateway: the OpenAI-compatible adapter with the gateway's base URL and a bearer token. The gateway SERVICE lives in its own repository (veridian-gateway), never here — same reason the marketplace does not."
+protocol = "veridian/1.0"
+runtime = "python"
+env_passthrough = ["VERIDIAN_GATEWAY_URL", "VERIDIAN_GATEWAY_TOKEN"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = ["network"]
+
+[[implements]]
+contract = "model_provider"
+methods = ["complete", "embed"]

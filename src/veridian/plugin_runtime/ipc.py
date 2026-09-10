@@ -33,6 +33,7 @@ from veridian.contracts.errors import (
     INTERNAL_ERROR,
     INVALID_REQUEST,
     METHOD_NOT_FOUND,
+    REQUEST_CANCELLED,
     TIMEOUT,
     ProtocolError,
 )
@@ -45,6 +46,12 @@ MalformedHandler = Callable[[str], None]
 _DEFAULT_CALL_TIMEOUT = 30.0
 _DEFAULT_STREAM_TIMEOUT = 300.0
 
+#: Notification the sender emits to ask the peer to abandon an in-flight request it originated
+#: (protocol spec §5.1, ``veridian/1.1``). The ``$/`` prefix marks a framing-level control message
+#: that carries no contract payload. A ``veridian/1.0`` peer ignores it and the call runs to its
+#: timeout.
+CANCEL_METHOD = "$/cancel"
+
 
 class StreamCall:
     """Handle for an in-flight streaming call. Iterate for delta ``params`` dicts, then await
@@ -53,6 +60,27 @@ class StreamCall:
     def __init__(self) -> None:
         self._deltas: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._result: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        #: wired by :meth:`Endpoint.call_stream` so the consumer can cancel the call
+        self._endpoint: "Endpoint | None" = None
+        self._req_id: int | str | None = None
+        self._request_future: asyncio.Future[Any] | None = None
+        self._cancelled = False
+
+    async def cancel(self) -> None:
+        """Abandon this streaming call: send ``$/cancel`` to the peer and finish the local stream
+        with a ``request_cancelled`` error. Idempotent. A ``veridian/1.0`` peer ignores the
+        notification, in which case the call still stops locally but the brick runs on until its
+        own timeout."""
+        if self._cancelled:
+            return
+        self._cancelled = True
+        if self._endpoint is not None and self._req_id is not None:
+            await self._endpoint._send_cancel(self._req_id)
+        if self._request_future is not None and not self._request_future.done():
+            self._request_future.cancel()
+        self._finish_err(
+            ProtocolError(REQUEST_CANCELLED, f"stream {self._req_id} cancelled by caller")
+        )
 
     def _push_delta(self, params: dict[str, Any]) -> None:
         self._deltas.put_nowait(params)
@@ -95,6 +123,9 @@ class Endpoint:
         self._next_id = 0
         self._pending: dict[int | str, asyncio.Future[Any]] = {}
         self._streams: dict[int | str, StreamCall] = {}
+        #: in-flight *inbound* request handlers, keyed by the peer's request id, so a ``$/cancel``
+        #: naming that id can cancel the task running it.
+        self._inbound_by_id: dict[int | str, asyncio.Task[None]] = {}
         self._request_handler: RequestHandler | None = None
         self._notification_handler: NotificationHandler | None = None
 
@@ -149,7 +180,13 @@ class Endpoint:
                 return await fut
             return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError:
+            self._fire_cancel(req_id)
             raise ProtocolError(TIMEOUT, f"{self.name}: call {method} timed out after {timeout}s") from None
+        except asyncio.CancelledError:
+            # The awaiting task is being torn down (e.g. Ctrl-C upstream). Tell the peer to stop
+            # so the request does not run to completion detached, then propagate.
+            self._fire_cancel(req_id)
+            raise
         finally:
             self._pending.pop(req_id, None)
 
@@ -165,6 +202,9 @@ class Endpoint:
         self._streams[req_id] = stream
         fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
+        stream._endpoint = self
+        stream._req_id = req_id
+        stream._request_future = fut
         await self._write({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}})
 
         async def _settle() -> None:
@@ -185,6 +225,24 @@ class Endpoint:
 
     async def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
         await self._write({"jsonrpc": "2.0", "method": method, "params": params or {}})
+
+    async def _send_cancel(self, req_id: int | str) -> None:
+        """Best-effort ``$/cancel`` for a request this endpoint originated. Never raises: a peer
+        that has already gone away needs no telling."""
+        try:
+            await self.notify(CANCEL_METHOD, {"id": req_id})
+        except ProtocolError:
+            pass
+
+    def _fire_cancel(self, req_id: int | str) -> None:
+        """Schedule :meth:`_send_cancel` without awaiting — safe to call from inside an
+        ``except CancelledError`` block, where a bare ``await`` would re-raise immediately."""
+        try:
+            task = asyncio.ensure_future(self._send_cancel(req_id))
+        except RuntimeError:  # no running loop (shutdown) — nothing to cancel
+            return
+        self._inbound_tasks.add(task)
+        task.add_done_callback(self._inbound_tasks.discard)
 
     async def _write(self, message: dict[str, Any]) -> None:
         try:
@@ -232,9 +290,17 @@ class Endpoint:
             self._resolve(msg)
             return
         if "method" in msg and has_id:
+            rid = msg["id"]
             task = asyncio.create_task(self._handle_request(msg), name=f"ipc-req:{self.name}")
             self._inbound_tasks.add(task)
-            task.add_done_callback(self._inbound_tasks.discard)
+            self._inbound_by_id[rid] = task
+
+            def _done(t: asyncio.Task[None], rid: int | str = rid) -> None:
+                self._inbound_tasks.discard(t)
+                if self._inbound_by_id.get(rid) is t:
+                    del self._inbound_by_id[rid]
+
+            task.add_done_callback(_done)
             return
         if "method" in msg:  # notification
             self._handle_notification(msg)
@@ -253,6 +319,16 @@ class Endpoint:
     def _handle_notification(self, msg: dict[str, Any]) -> None:
         params = msg.get("params") or {}
         method = msg["method"]
+
+        # $/cancel names a request this endpoint is *serving*; cancel the task running it. The
+        # handler's own awaits (including any host.contract.call it made) unwind, which is how the
+        # cancel cascades down a chain of bricks.
+        if method == CANCEL_METHOD:
+            target = self._inbound_by_id.get(params.get("id"))
+            if target is not None and not target.done():
+                target.cancel()
+            return
+
         # Streaming deltas are notifications carrying params.request_id (protocol spec section 5).
         rid = params.get("request_id")
         if rid is not None and rid in self._streams:
@@ -286,6 +362,9 @@ class Endpoint:
         except ProtocolError as exc:
             await self._send_error(req_id, exc.code, exc.message, exc.data)
         except asyncio.CancelledError:
+            # Tell the originator the request ended because it was cancelled. Best-effort: the
+            # originator has usually stopped waiting already, and we must not swallow the cancel.
+            self._fire_send_error(req_id, REQUEST_CANCELLED, f"{method} cancelled")
             raise
         except Exception as exc:  # noqa: BLE001 - map any handler crash to a JSON-RPC error
             await self._send_error(req_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}")
@@ -306,6 +385,18 @@ class Endpoint:
         if data is not None:
             err["data"] = data
         await self._safe_send({"jsonrpc": "2.0", "id": req_id, "error": err})
+
+    def _fire_send_error(
+        self, req_id: int | str, code: int, message: str, data: dict[str, Any] | None = None
+    ) -> None:
+        """Schedule an error response without awaiting — for use from an ``except CancelledError``
+        block."""
+        try:
+            task = asyncio.ensure_future(self._send_error(req_id, code, message, data))
+        except RuntimeError:
+            return
+        self._inbound_tasks.add(task)
+        task.add_done_callback(self._inbound_tasks.discard)
 
     async def _safe_send(self, message: dict[str, Any]) -> None:
         try:

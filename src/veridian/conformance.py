@@ -1,6 +1,7 @@
 """The conformance harness.
 
-Point it at a brick directory. It starts the brick, negotiates ``veridian/1.0``, calls every
+Point it at a brick directory. It starts the brick, negotiates ``veridian/1.1`` (accepting any
+peer that shares the major version), calls every
 method of every contract the brick reports from ``plugin.capabilities``, and validates both
 directions against the JSON Schemas. It is what lets a stranger's brick be trusted, and what a
 future Rust kernel would be validated against.
@@ -18,12 +19,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from veridian.contracts import CONTRACTS, PROTOCOL_VERSION, SchemaValidationError
+from veridian.contracts import (
+    CONTRACTS,
+    PROTOCOL_VERSION,
+    SchemaValidationError,
+    is_compatible_protocol,
+)
 from veridian.contracts import lifecycle as lifecycle_contract
 from veridian.contracts._schemas import validate as validate_schema
 from veridian.contracts.errors import ProtocolError
 from veridian.plugin_runtime.manifest import load_manifest
-from veridian.plugin_runtime.process import BrickProcess, base_env
+from veridian.plugin_runtime.process import BrickProcess, base_env, spawn_strategy_for
 from veridian.plugin_runtime.registry import cross_check_capabilities, parse_capabilities_result
 
 # Minimal valid example params for every contract method. Kept here, next to the harness, so the
@@ -48,6 +54,12 @@ EXAMPLES: dict[str, dict[str, dict[str, Any]]] = {
         "read": {"id": "_probe_missing"},
         "search": {"query": "probe", "k": 3},
         "forget": {"tags": ["_probe"]},
+    },
+    "conversation": {
+        "append": {"session_id": "_probe", "message": {"role": "user", "content": "conformance probe"}},
+        "load": {"session_id": "_probe", "limit": 10},
+        "list_sessions": {},
+        "delete": {"session_id": "_probe_missing"},
     },
     "planner": {
         "plan": {"goal": "do a and b"},
@@ -106,11 +118,14 @@ async def run_conformance(brick_dir: Path, *, timeout: float = 30.0) -> Conforma
 
     tmp = tempfile.TemporaryDirectory(prefix="veridian-conformance-")
     workspace = Path(tmp.name)  # a throwaway workspace, so probe writes never touch the repo
+    spawn = spawn_strategy_for(manifest).resolve(
+        manifest, workspace_root=workspace, brick_env=base_env(manifest.env_passthrough)
+    )
     proc = BrickProcess(
         manifest.name,
-        manifest.resolved_command(),
-        cwd=workspace,
-        env=base_env(manifest.env_passthrough),
+        spawn.argv,
+        cwd=Path(spawn.cwd),
+        env=spawn.env,
         on_malformed=lambda raw: report.problems.append(f"malformed stdout line: {raw[:200]}"),
     )
     endpoint = await proc.start()
@@ -126,7 +141,7 @@ async def run_conformance(brick_dir: Path, *, timeout: float = 30.0) -> Conforma
         except SchemaValidationError as exc:
             report.problems.append(f"plugin.initialize result invalid: {exc}")
             return report
-        if init.get("protocol_version") != PROTOCOL_VERSION:
+        if not is_compatible_protocol(init.get("protocol_version")):
             report.problems.append(f"protocol version mismatch: {init.get('protocol_version')}")
             return report
         if not init.get("ready", False):

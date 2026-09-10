@@ -27,7 +27,12 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from veridian.contracts import CONTRACTS, PROTOCOL_VERSION, SchemaValidationError
+from veridian.contracts import (
+    CONTRACTS,
+    PROTOCOL_VERSION,
+    SchemaValidationError,
+    is_compatible_protocol,
+)
 from veridian.contracts.errors import (
     INVALID_PARAMS,
     PROTOCOL_VERSION_MISMATCH,
@@ -152,10 +157,11 @@ class Brick:
             raise BrickError(f"{type(exc).__name__}: {exc}") from exc
 
     async def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
-        if params.get("protocol_version") != PROTOCOL_VERSION:
+        if not is_compatible_protocol(params.get("protocol_version")):
             raise ProtocolError(
                 PROTOCOL_VERSION_MISMATCH,
-                f"{self.name} speaks {PROTOCOL_VERSION!r}, kernel offered {params.get('protocol_version')!r}",
+                f"{self.name} speaks {PROTOCOL_VERSION!r}, kernel offered "
+                f"{params.get('protocol_version')!r} (major version must match)",
             )
         self.capabilities = list(params.get("capabilities", []))
         self.workspace_root = params.get("workspace_root", ".")

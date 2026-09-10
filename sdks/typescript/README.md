@@ -2,9 +2,11 @@
 
 The TypeScript brick SDK for the [Veridian](../../README.md) runtime.
 
-A brick is a subprocess that speaks `veridian/1.0` — JSON-RPC 2.0, one message per NDJSON line,
+A brick is a subprocess that speaks `veridian/1.1` — JSON-RPC 2.0, one message per NDJSON line,
 protocol on stdout, logs on stderr. This SDK handles framing, lifecycle, dispatch, streaming
-deltas, host-service calls, and error mapping so a brick author writes only handlers.
+deltas, host-service calls, and error mapping so a brick author writes only handlers. It
+negotiates by major version, so it also talks to a `veridian/1.0` kernel; it does not interrupt a
+running handler on `$/cancel`.
 
 ```ts
 import { serve } from "@veridian/sdk";

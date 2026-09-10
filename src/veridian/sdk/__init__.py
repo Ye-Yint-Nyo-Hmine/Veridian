@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from veridian.sdk.brick import Brick, BrickError, RequestContext, rpc, run
+from veridian.sdk.conversation import Conversation
 from veridian.sdk.host import HostProxy
 
-__all__ = ["Brick", "BrickError", "RequestContext", "rpc", "run", "HostProxy"]
+__all__ = ["Brick", "BrickError", "RequestContext", "rpc", "run", "HostProxy", "Conversation"]

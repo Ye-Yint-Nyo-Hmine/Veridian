@@ -75,6 +75,24 @@
       "properties": {
         "request_id": { "$ref": "#/$defs/Id" }
       }
+    },
+    "Cancel": {
+      "description": "The $/cancel control notification (veridian/1.1, protocol spec §5.1). Asks the peer to abandon a request the sender originated.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "method": { "const": "$/cancel" },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/$defs/Id" }
+          }
+        }
+      }
     }
   }
 }

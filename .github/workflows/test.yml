@@ -41,6 +41,22 @@ jobs:
           ANTHROPIC_API_KEY: ""
           OPENAI_API_KEY: ""
 
+  container:
+    # Container spawn mode (Milestone 2 / A2): needs a real Docker engine, which the GitHub
+    # ubuntu runners provide. Pulls a small python image, so it runs as its own job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --extra dev
+      - name: Container-isolation suite (spawns bricks in Docker)
+        run: uv run pytest -m container
+        env:
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
+
   live:
     # Manually triggered only. Uses repository secrets.
     if: github.event_name == 'workflow_dispatch'

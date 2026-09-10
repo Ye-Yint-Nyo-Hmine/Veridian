@@ -14,6 +14,7 @@ from __future__ import annotations
 from veridian.sdk import Brick, BrickError, rpc, run
 
 _CONTRACT_NOT_BOUND = -32002
+_PERMISSION_DENIED = -32001
 
 _MAX_ITERATIONS = 12
 
@@ -33,10 +34,24 @@ class OrchestratorDefault(Brick):
                 return None
             raise
 
+    async def _opt(self, contract: str, method: str, params: dict):
+        """Like ``_try`` but also a no-op when the capability was never granted. For genuinely
+        optional side-channels (``conversation`` history) that a stack may simply omit."""
+        try:
+            return await self.host.contract_call(contract, method, params)
+        except Exception as exc:  # noqa: BLE001
+            if getattr(exc, "code", None) in (_CONTRACT_NOT_BOUND, _PERMISSION_DENIED):
+                return None
+            raise
+
     @rpc("orchestrator.run", streaming=True)
     async def run_(self, params, ctx):
         goal = params["goal"]
         max_iter = int((params.get("limits") or {}).get("max_iterations", _MAX_ITERATIONS))
+        # Optional local chat history. A stack that binds `conversation` gets cross-run continuity;
+        # one that doesn't behaves exactly as before. The session id is a deployment concern in
+        # Version 0, so it comes from brick config, not the wire.
+        session_id = str(self.config.get("session_id") or "default")
 
         async def emit(event: str, **data):
             await ctx.emit_delta({"event": event, "data": data})
@@ -87,9 +102,20 @@ class OrchestratorDefault(Brick):
                     "When the goal is met, reply with a short summary and no tool calls.\n\n"
                     + (f"Relevant context:\n{context_text}\n" if context_text else "")
                 ),
-            },
-            {"role": "user", "content": goal},
+            }
         ]
+
+        # prior turns from local chat history, if a `conversation` brick is bound
+        history = await self._opt("conversation", "load", {"session_id": session_id, "limit": 40})
+        if history and history.get("messages"):
+            transcript.extend(e["message"] for e in history["messages"])
+            await emit("log", message=f"loaded {len(history['messages'])} prior turn(s) from session {session_id!r}")
+
+        transcript.append({"role": "user", "content": goal})
+        # persist the user turn now, so it survives even a run that fails at inference
+        await self._opt(
+            "conversation", "append", {"session_id": session_id, "message": {"role": "user", "content": goal}}
+        )
 
         iterations = 0
         status = "failed"
@@ -172,6 +198,12 @@ class OrchestratorDefault(Brick):
             "memory",
             "write",
             {"content": f"goal: {goal}\noutcome: {status}\nsummary: {summary}", "tags": ["orchestrator-run"]},
+        )
+        # 6. record the assistant turn in local chat history (no-op if unbound)
+        await self._opt(
+            "conversation",
+            "append",
+            {"session_id": session_id, "message": {"role": "assistant", "content": summary}},
         )
 
         return {"status": status, "iterations": iterations, "summary": summary}

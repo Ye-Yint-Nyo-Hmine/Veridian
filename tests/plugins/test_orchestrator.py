@@ -8,11 +8,11 @@ live test at the bottom and the Phase 8 smoke script.
 
 from __future__ import annotations
 
-import os
 import textwrap
 
 import pytest
 
+from tests.live_providers import PROVIDER, requires_live_provider
 from veridian.contracts.errors import ProtocolError
 from veridian.kernel import Kernel, load_stack
 
@@ -72,13 +72,13 @@ async def test_orchestrator_wires_up_then_fails_gracefully_without_a_provider(tm
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
+@requires_live_provider
 async def test_orchestrator_end_to_end_live(tmp_path):
+    # A5: gate on whichever provider is actually reachable — a local Ollama/llama.cpp server
+    # first, a cloud key only as a fallback — so a contributor with no cloud keys still runs
+    # the real agent loop instead of skipping it.
     (tmp_path / "mod.py").write_text("def top():\n    return 42\n", encoding="utf-8")
-    stack = _HERMETIC_STACK.replace(
-        'inference = "bricks/inference/anthropic"',
-        'inference = { brick = "bricks/inference/anthropic", config = { model = "claude-opus-5", max_tokens = 1024 } }',
-    )
+    stack = _HERMETIC_STACK.replace('inference = "bricks/inference/anthropic"', PROVIDER.binding)
     k = await _kernel(tmp_path, stack)
     try:
         stream = await k.call_stream(

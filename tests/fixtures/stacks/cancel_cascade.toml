@@ -1,0 +1,10 @@
+[stack]
+name = "cancel-cascade"
+description = "Outer brick calls inner through host.contract.call; used to test $/cancel cascading."
+
+[policy]
+grant = ["contract:echo", "contract:echo_inner"]
+
+[bindings]
+echo = "tests/fixtures/echo/cancel_outer"
+echo_inner = "tests/fixtures/echo/cancel_inner"

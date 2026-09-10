@@ -54,6 +54,42 @@ def dependency_fingerprint(dependencies: dict[str, Any]) -> str:
 
 
 @dataclass(frozen=True)
+class IsolationSpec:
+    """The manifest's ``[isolation]`` table, normalised.
+
+    ``mode == "process"`` (the default, and the whole of Milestone 1) is a plain subprocess.
+    ``mode == "container"`` runs the brick inside a container the kernel drives, where ``network``
+    and ``allow_hosts`` become an OS-level egress boundary rather than an advisory capability.
+    """
+
+    mode: str = "process"
+    image: str | None = None
+    engine: str | None = None  # None -> auto-detect (docker, then podman)
+    network: bool = False
+    allow_hosts: tuple[str, ...] = ()
+
+    @property
+    def is_container(self) -> bool:
+        return self.mode == "container"
+
+    @property
+    def unrestricted_egress(self) -> bool:
+        """``network = true`` with no allowlist: the brick may reach anything. Legal, but a brick
+        that also handles conversation content must never be spawned this way (enforced in the
+        registry)."""
+        return self.is_container and self.network and not self.allow_hosts
+
+
+_PROCESS_ISOLATION = IsolationSpec()
+
+# Contracts whose payloads carry the user's system prompt, memory, conversation, or workspace
+# content. A brick implementing any of these must never run with unrestricted egress.
+_CONTENT_CONTRACTS = frozenset(
+    {"inference", "model_provider", "orchestrator", "context", "memory", "planner", "conversation", "workspace"}
+)
+
+
+@dataclass(frozen=True)
 class Manifest:
     name: str
     version: str
@@ -68,12 +104,30 @@ class Manifest:
     env_passthrough: list[str] = field(default_factory=list)
     optional_dependencies: list[str] = field(default_factory=list)
     dependencies: dict[str, Any] = field(default_factory=dict)
+    isolation: IsolationSpec = _PROCESS_ISOLATION
     raw: dict[str, Any] = field(default_factory=dict)
 
     def declares(self, contract: str, method: str | None = None) -> bool:
         if contract not in self.implements:
             return False
         return method is None or method in self.implements[contract]
+
+    def assert_egress_sane(self) -> None:
+        """Refuse ``isolation.network = true`` with no ``allow_hosts`` for a brick that also handles
+        conversation content. Unrestricted egress is legal in the abstract, but a content brick that
+        can reach anything breaks the Milestone 2 bar that every network destination in a stack is
+        enumerable from the manifests alone. ``network = true`` *with* an allowlist is fine."""
+        if not self.isolation.unrestricted_egress:
+            return
+        content = sorted(set(self.implements) & _CONTENT_CONTRACTS)
+        if content:
+            raise ProtocolError(
+                INVALID_MANIFEST,
+                f"{self.name}: isolation.network = true with no allow_hosts grants unrestricted "
+                f"egress, but this brick implements {content} and handles conversation content; "
+                f"declare an isolation.allow_hosts allowlist instead",
+                {"brick": self.name, "contracts": content},
+            )
 
     def needs_isolated_env(self) -> bool:
         """True when this brick declares third-party dependencies and therefore must be resolved
@@ -171,6 +225,22 @@ def parse_manifest(data: dict[str, Any], directory: Path) -> Manifest:
 
     implements = {entry["contract"]: list(entry["methods"]) for entry in data["implements"]}
     caps = data.get("capabilities", {})
+    iso_raw = data.get("isolation")
+    if iso_raw:
+        isolation = IsolationSpec(
+            mode=iso_raw.get("mode", "process"),
+            image=iso_raw.get("image"),
+            engine=iso_raw.get("engine"),
+            network=bool(iso_raw.get("network", False)),
+            allow_hosts=tuple(iso_raw.get("allow_hosts", [])),
+        )
+        if isolation.is_container and not isolation.image:
+            raise ProtocolError(
+                INVALID_MANIFEST,
+                f"{directory / MANIFEST_FILENAME}: isolation.mode = \"container\" requires isolation.image",
+            )
+    else:
+        isolation = _PROCESS_ISOLATION
     return Manifest(
         name=data["name"],
         version=data["version"],
@@ -185,6 +255,7 @@ def parse_manifest(data: dict[str, Any], directory: Path) -> Manifest:
         env_passthrough=list(data.get("env_passthrough", [])),
         optional_dependencies=list(data.get("optional_dependencies", [])),
         dependencies=dict(data.get("dependencies", {})),
+        isolation=isolation,
         raw=data,
     )
 

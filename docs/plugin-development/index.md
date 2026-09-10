@@ -1,7 +1,7 @@
 # Plugin development
 
-A brick is a subprocess that speaks `veridian/1.0`. You do not import anything from the kernel;
-you speak the protocol.
+A brick is a subprocess that speaks `veridian/1.1` (or `veridian/1.0` — the kernel negotiates by
+major version). You do not import anything from the kernel; you speak the protocol.
 
 ## Anatomy
 
@@ -16,7 +16,7 @@ bricks/<contract>/<name>/
 ```toml
 name = "context/my-retriever"
 version = "0.1.0"
-protocol = "veridian/1.0"
+protocol = "veridian/1.1"
 runtime = "python"
 
 [spawn]

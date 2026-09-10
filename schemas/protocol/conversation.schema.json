@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veridian.dev/schemas/protocol/conversation.schema.json",
+  "title": "conversation contract",
+  "description": "Local chat history, first-class and distinct from memory. A conversation is an ordered append-only log of turns within a session, stored on the user's device. Nothing here reaches a server. Version 0 privacy: this is the 'chat history' box on the client.",
+  "$defs": {
+    "Entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "seq", "created_at", "message"],
+      "properties": {
+        "id": { "type": "string" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string" },
+        "message": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "SessionInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "created_at", "updated_at", "message_count"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "preview": { "type": "string" }
+      }
+    },
+    "append_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "message"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "message": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "append_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "seq"],
+      "properties": {
+        "id": { "type": "string" },
+        "seq": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "load_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "limit": { "type": "integer", "minimum": 1 },
+        "before_seq": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "load_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "messages"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "messages": { "type": "array", "items": { "$ref": "#/$defs/Entry" } }
+      }
+    },
+    "list_sessions_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "list_sessions_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessions"],
+      "properties": {
+        "sessions": { "type": "array", "items": { "$ref": "#/$defs/SessionInfo" } }
+      }
+    },
+    "delete_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "delete_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deleted"],
+      "properties": {
+        "deleted": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

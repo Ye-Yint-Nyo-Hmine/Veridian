@@ -12,6 +12,7 @@ import textwrap
 
 import pytest
 
+from tests.live_providers import LOCAL_MODEL, requires_local_server
 from veridian.contracts.errors import ProtocolError
 from veridian.kernel import Kernel, load_stack
 
@@ -166,6 +167,57 @@ async def test_live_anthropic_stream(tmp_path):
         assert any(d["delta"]["type"] == "text" for d in deltas)
         final = await stream.result()
         assert final["stop_reason"] in {"stop", "length"}
+    finally:
+        await k.stop()
+
+
+@live
+@requires_local_server
+async def test_live_local_generate(tmp_path):
+    # A5: the direct path for bricks/inference/local — an OpenAI-compatible server on localhost
+    # (Ollama by default). No cloud key involved.
+    k = await _kernel(
+        tmp_path,
+        f"""
+        [stack]
+        name = "i"
+        [policy]
+        grant = ["network"]
+        [bindings]
+        inference = {{ brick = "bricks/inference/local", config = {{ model = "{LOCAL_MODEL}" }} }}
+        """,
+    )
+    try:
+        res = await k.call(
+            "inference",
+            "generate",
+            {"messages": [{"role": "user", "content": "Reply with the single word: pong"}], "max_tokens": 64},
+        )
+        text = "".join(b["text"] for b in res["message"]["content"] if b["type"] == "text")
+        assert text.strip(), "local model returned no text"
+        assert res["usage"]["output_tokens"] > 0
+    finally:
+        await k.stop()
+
+
+@live
+@requires_local_server
+async def test_live_local_models_lists_the_server(tmp_path):
+    k = await _kernel(
+        tmp_path,
+        """
+        [stack]
+        name = "i"
+        [policy]
+        grant = ["network"]
+        [bindings]
+        inference = "bricks/inference/local"
+        """,
+    )
+    try:
+        res = await k.call("inference", "models", {})
+        assert isinstance(res["models"], list) and res["models"]
+        assert all("id" in m for m in res["models"])
     finally:
         await k.stop()
 

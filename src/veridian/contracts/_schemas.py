@@ -18,7 +18,30 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 SCHEMA_BASE_URI = "https://veridian.dev/schemas/"
-PROTOCOL_VERSION = "veridian/1.0"
+
+#: The protocol version this build speaks. ``veridian/1.1`` adds optional cancellation
+#: (``$/cancel``, error ``request_cancelled``) over ``veridian/1.0``; the method contracts and the
+#: NDJSON-over-stdio framing are unchanged. Peers negotiate by *major* version only — a
+#: ``veridian/1.0`` peer is compatible and simply never sends or honours ``$/cancel``.
+PROTOCOL_VERSION = "veridian/1.1"
+
+
+def protocol_major(version: object) -> str | None:
+    """The major-version token of a ``veridian/<major>.<minor>`` string, or ``None`` if it is not
+    a well-formed Veridian version."""
+    if not isinstance(version, str) or "/" not in version:
+        return None
+    scheme, _, rest = version.partition("/")
+    if scheme != "veridian" or not rest:
+        return None
+    return rest.split(".", 1)[0] or None
+
+
+def is_compatible_protocol(version: object) -> bool:
+    """True when ``version`` shares this build's major version (spec §1.1)."""
+    return protocol_major(version) is not None and protocol_major(version) == protocol_major(
+        PROTOCOL_VERSION
+    )
 
 
 class SchemaValidationError(ValueError):

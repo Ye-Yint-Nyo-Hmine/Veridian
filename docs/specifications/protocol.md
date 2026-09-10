@@ -1,6 +1,11 @@
 # Veridian Protocol Specification
 
-**Status:** normative for Milestone 1. **Protocol version:** `veridian/1.0`.
+**Status:** normative for Milestone 1. **Protocol version:** `veridian/1.1`.
+
+> **1.0 → 1.1.** Adds optional cancellation: the `$/cancel` notification (§5.1) and the
+> `request_cancelled` error (`-32009`). Method contracts and framing are unchanged. A `veridian/1.0`
+> peer is fully compatible — it never sends `$/cancel` and ignores one it receives, so a cancelled
+> call against it simply runs to its timeout.
 
 This document defines how the Veridian kernel and a brick communicate. The JSON Schema files under
 `schemas/` are the source of truth for every payload shape. Where prose here and a schema disagree,
@@ -24,10 +29,16 @@ A brick is a subprocess. The kernel spawns it and speaks to it over its standard
 
 ### 1.1 Framing is versioned
 
-The negotiated protocol version (`veridian/1.0`) names *both* the method contracts *and* the
-framing (`NDJSON over stdio`). A future version may define length-prefixed frames or a socket
-transport under a new version string without changing any method contract. Implementations MUST
-reject a peer whose major version differs (`protocol_version_mismatch`, code `-32008`).
+The negotiated protocol version (`veridian/<major>.<minor>`) names *both* the method contracts
+*and* the framing (`NDJSON over stdio`). A future major version may define length-prefixed frames
+or a socket transport without changing any method contract.
+
+Peers negotiate by **major version only**. An implementation MUST reject a peer whose major
+version differs (`protocol_version_mismatch`, code `-32008`) and MUST accept one whose major
+version matches, whatever its minor. A minor version only *adds* optional messages; a peer that
+does not implement an addition MUST ignore it rather than fault. `plugin.initialize` still
+exchanges the full `veridian/<major>.<minor>` string in both directions so each side can detect
+which optional features the other supports.
 
 ### 1.2 Message quarantine
 
@@ -65,8 +76,9 @@ All messages are JSON-RPC 2.0. The envelope schema is `schemas/protocol/envelope
 
 ### 2.4 Notification
 
-A message with no `id`. Used for streaming (§5) and for fire-and-forget host calls (`host.log`).
-A notification never receives a response.
+A message with no `id`. Used for streaming (§5), cancellation (§5.1), and for fire-and-forget
+host calls (`host.log`). A notification never receives a response. Method names beginning `$/` are
+framing-level control messages reserved by the protocol; they carry no contract payload.
 
 ```json
 { "jsonrpc": "2.0", "method": "inference.delta", "params": { "request_id": 42, "delta": { ... } } }
@@ -137,6 +149,30 @@ final response, or for an unknown `request_id`, are dropped with a `brick.orphan
 `orchestrator.run` uses the same mechanism with method `orchestrator.delta` and an `event` tag on
 each delta (`step`, `tool`, `message`, `log`).
 
+### 5.1 Cancellation (`veridian/1.1`)
+
+Either peer MAY abandon a request it originated by sending a **`$/cancel` notification** naming
+that request's id:
+
+```json
+{ "jsonrpc": "2.0", "method": "$/cancel", "params": { "id": 42 } }
+```
+
+- `$/cancel` is fire-and-forget; it never receives a response. It is valid only for a request the
+  **sender** originated and that has not yet been answered. A `$/cancel` for an unknown or
+  already-settled id is a no-op.
+- On receipt, the peer SHOULD stop work on request `42` promptly and SHOULD answer it with an
+  error response of code `-32009` (`request_cancelled`). It MAY still answer with a normal result
+  if the work had already completed. The originator, having sent `$/cancel`, MUST tolerate either
+  a `request_cancelled` error, a late success, or no response at all.
+- **Cascade.** When the cancelled request is one the kernel is serving via `host.contract.call`
+  (§7), the kernel MUST send `$/cancel` for the downstream request it issued on the caller's
+  behalf, and so on down the chain. Cancelling `orchestrator.run` therefore also cancels the
+  `inference` call the orchestrator was blocked on, and any `model_provider` call under that.
+- A `veridian/1.0` peer never sends `$/cancel` and ignores one it receives. Against such a peer a
+  cancelled call stops on the *originator's* side but runs on the peer until the call's timeout
+  (`-32006`) — the pre-1.1 behaviour.
+
 ---
 
 ## 6. Contracts
@@ -151,11 +187,17 @@ One schema file per contract under `schemas/protocol/`, one module per contract 
 | `model_provider` | `complete`, `embed` | — |
 | `context` | `index`, `retrieve`, `invalidate` | — |
 | `memory` | `write`, `read`, `search`, `forget` | — |
+| `conversation` | `append`, `load`, `list_sessions`, `delete` | — |
 | `planner` | `plan`, `next`, `is_complete` | — |
 | `sandbox` | `exec`, `spawn`, `write`, `kill`, `reset` | — |
 | `tools` | `list`, `invoke` | — |
 | `workspace` | `read`, `write`, `list`, `stat` | — |
 | `orchestrator` | `run` | `orchestrator.delta` |
+
+> **Additive in Milestone 2.** `conversation` was added after `veridian/1.1` shipped. A new
+> contract adds only a schema file and a binding name; it changes no framing and no existing
+> method, so it needs no version bump. A kernel or brick that does not know the contract simply
+> never binds it (`contract_not_bound`, `-32002`).
 
 `inference` and `model_provider` are deliberately distinct. A `model_provider` adapts exactly one
 vendor API (`complete`, `embed`). An `inference` engine is a *strategy* — it may route, ensemble,
@@ -218,6 +260,7 @@ server errors):
 | `-32006` | `timeout` | Call exceeded its deadline |
 | `-32007` | `invalid_manifest` | Manifest failed schema validation or lied about `implements` |
 | `-32008` | `protocol_version_mismatch` | Peer's protocol major version is incompatible |
+| `-32009` | `request_cancelled` | Request was abandoned by its originator via `$/cancel` (§5.1) before it completed |
 
 `error.data`, when present, is an object. For validation errors it carries `{ schema, path,
 detail }`.
@@ -226,13 +269,17 @@ detail }`.
 
 ## 9. Conformance
 
-A brick conforms to `veridian/1.0` when, for every contract it reports from
+A brick conforms to `veridian/1.1` when, for every contract it reports from
 `plugin.capabilities`:
 
 - every request the kernel sends validates against that contract's params schema, and
 - every response and delta the brick sends validates against the corresponding result / delta
   schema, and
 - lifecycle and error semantics in §4, §5, and §8 hold.
+
+Honouring `$/cancel` (§5.1) is **not** required for conformance — a conformant brick MAY ignore it
+and be driven to its timeout instead. A brick that does act on `$/cancel` MUST still end the
+cancelled request with a valid message (a `request_cancelled` error or a late valid result).
 
 `tests/conformance/` is the executable form of this section and any future kernel (including a
 Rust port) is validated against it.

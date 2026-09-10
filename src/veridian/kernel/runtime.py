@@ -24,6 +24,7 @@ from veridian.contracts.host import validate_params as validate_host_params
 from veridian.kernel.config import ResolvedStack, load_stack
 from veridian.kernel.events import (
     CONTRACT_CALL,
+    CONTRACT_CALL_CANCELLED,
     CONTRACT_CALL_FAILED,
     KERNEL_READY,
     KERNEL_STOPPING,
@@ -229,6 +230,14 @@ class Kernel:
         except ProtocolError as exc:
             self.events.emit_type(
                 CONTRACT_CALL_FAILED, source=caller, contract=contract, method=method, code=exc.code
+            )
+            raise
+        except asyncio.CancelledError:
+            # The caller's own request was cancelled while this forwarded call was in flight.
+            # ``Endpoint.call`` has already sent ``$/cancel`` on to the target brick; record that
+            # the cancellation cascaded one hop further down the chain.
+            self.events.emit_type(
+                CONTRACT_CALL_CANCELLED, source=caller, contract=contract, method=method
             )
             raise
         self._maybe_validate_result(contract, method, result)

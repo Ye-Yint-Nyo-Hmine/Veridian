@@ -1,0 +1,15 @@
+name = "echo/cancel-inner"
+version = "1.0.0"
+description = "Blocks in echo_inner.wait; drops marker files when it starts and when it is cancelled."
+protocol = "veridian/1.1"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo_inner"
+methods = ["wait"]
+
+[capabilities]
+requires = ["contract:echo_inner"]

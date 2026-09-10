@@ -15,6 +15,7 @@ requires = [
   "contract:tools",
   "contract:memory",
   "contract:sandbox",
+  "contract:conversation",
 ]
 
 [[implements]]

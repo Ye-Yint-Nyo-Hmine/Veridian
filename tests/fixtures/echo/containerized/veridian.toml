@@ -1,0 +1,17 @@
+name = "toolbox/containerized"
+version = "0.1.0"
+description = "A2 fixture: a stdlib-only tools brick that runs inside a container and probes the network."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "tools"
+methods = ["list", "invoke"]
+
+[isolation]
+mode = "container"
+image = "python:3.13-slim"
+network = false

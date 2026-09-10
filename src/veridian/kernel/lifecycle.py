@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from veridian.contracts import PROTOCOL_VERSION
+from veridian.contracts import PROTOCOL_VERSION, is_compatible_protocol
 from veridian.contracts.errors import ProtocolError
 from veridian.kernel.errors import BrickStartError
 from veridian.kernel.events import (
@@ -28,7 +28,13 @@ from veridian.kernel.events import (
 )
 from veridian.kernel.config import ResolvedBinding
 from veridian.plugin_runtime.ipc import Endpoint
-from veridian.plugin_runtime.process import BrickProcess, base_env
+from veridian.plugin_runtime.process import (
+    BrickProcess,
+    ContainerUnavailable,
+    EngineCommandError,
+    base_env,
+    spawn_strategy_for,
+)
 from veridian.plugin_runtime.registry import BrickHandle, cross_check_capabilities, parse_capabilities_result
 
 RequestRouter = Callable[[str, list[str], str, dict], Awaitable[object]]
@@ -82,18 +88,29 @@ class BrickSupervisor:
     async def _spawn_and_init(self) -> BrickHandle:
         manifest = self.binding.manifest
         self.bus.emit_type(BRICK_STARTING, source=self.name, contract=self.contract)
-        env = base_env(manifest.env_passthrough, self.binding.env)
+        brick_env = base_env(manifest.env_passthrough, self.binding.env)
+        try:
+            spawn = spawn_strategy_for(manifest).resolve(
+                manifest, workspace_root=self.workspace_root, brick_env=brick_env
+            )
+        except ContainerUnavailable as exc:
+            raise BrickStartError(f"{self.name}: {exc}") from exc
         proc = BrickProcess(
             manifest.name,
-            manifest.resolved_command(),
-            cwd=self.workspace_root,
-            env=env,
+            spawn.argv,
+            cwd=Path(spawn.cwd),
+            env=spawn.env,
             kill_timeout=self.kill_timeout,
             on_stderr=lambda ln: self.bus.emit_type(BRICK_STDERR, source=self.name, line=ln),
             on_malformed=lambda raw: self.bus.emit_type(BRICK_MALFORMED_LINE, source=self.name, raw=raw),
             on_exit=self._on_process_exit,
+            pre_run=spawn.pre_run,
+            post_run=spawn.post_run,
         )
-        endpoint = await proc.start()
+        try:
+            endpoint = await proc.start()
+        except EngineCommandError as exc:
+            raise BrickStartError(f"{self.name}: container setup failed: {exc}") from exc
         endpoint.on_request(self._make_request_handler())
         endpoint.on_notification(self._make_notification_handler())
 
@@ -110,9 +127,10 @@ class BrickSupervisor:
             )
             if not init.get("ready", False):
                 raise BrickStartError(f"{self.name}: reported not ready: {init.get('detail', '')}")
-            if init.get("protocol_version") != PROTOCOL_VERSION:
+            if not is_compatible_protocol(init.get("protocol_version")):
                 raise BrickStartError(
-                    f"{self.name}: protocol {init.get('protocol_version')!r} != {PROTOCOL_VERSION!r}"
+                    f"{self.name}: protocol {init.get('protocol_version')!r} is incompatible with "
+                    f"kernel {PROTOCOL_VERSION!r} (major version must match)"
                 )
             caps = await endpoint.call("plugin.capabilities", {}, timeout=self.init_timeout)
             reported = parse_capabilities_result(caps)

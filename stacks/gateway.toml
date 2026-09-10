@@ -1,0 +1,39 @@
+# Inference through a Veridian gateway.
+#
+# The gateway SERVICE (authenticate, rate limit, route, proxy, persist nothing) is a separate
+# project, `veridian-gateway`. This repo carries only the client: `model_provider/gateway`, which
+# is the OpenAI-compatible adapter with the gateway's base URL and a bearer token. The inference
+# ENGINE here is an example brick that composes the `model_provider` contract — so nothing in this
+# stack knows which model is behind the gateway. Set VERIDIAN_GATEWAY_URL and
+# VERIDIAN_GATEWAY_TOKEN in the environment.
+
+[stack]
+name = "gateway"
+description = "Inference composed over a gateway-facing model_provider. No provider identity in this file."
+
+[policy]
+grant = [
+  "network",
+  "process:spawn",
+  "workspace:read",
+  "workspace:write",
+  "contract:inference",
+  "contract:model_provider",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+  "contract:conversation",
+]
+
+[bindings]
+model_provider = "bricks/model_provider/gateway"
+inference = "examples/custom-inference"
+context = "bricks/context/default"
+planner = "bricks/planning/default"
+memory = "bricks/memory/ephemeral"
+sandbox = "bricks/sandbox/local"
+tools = "bricks/tools/filesystem"
+conversation = "bricks/conversation/sqlite"
+orchestrator = "bricks/orchestrator/default"

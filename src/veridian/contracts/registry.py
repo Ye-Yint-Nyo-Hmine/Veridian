@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from veridian.contracts import (
     context,
+    conversation,
     inference,
     memory,
     model_provider,
@@ -23,6 +24,7 @@ CONTRACTS: dict[str, ContractSpec] = {
         model_provider.SPEC,
         context.SPEC,
         memory.SPEC,
+        conversation.SPEC,
         planner.SPEC,
         sandbox.SPEC,
         tools.SPEC,

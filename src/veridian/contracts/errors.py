@@ -20,6 +20,7 @@ BRICK_UNAVAILABLE = -32005
 TIMEOUT = -32006
 INVALID_MANIFEST = -32007
 PROTOCOL_VERSION_MISMATCH = -32008
+REQUEST_CANCELLED = -32009
 
 _NAMES = {
     PARSE_ERROR: "parse_error",
@@ -35,6 +36,7 @@ _NAMES = {
     TIMEOUT: "timeout",
     INVALID_MANIFEST: "invalid_manifest",
     PROTOCOL_VERSION_MISMATCH: "protocol_version_mismatch",
+    REQUEST_CANCELLED: "request_cancelled",
 }
 
 

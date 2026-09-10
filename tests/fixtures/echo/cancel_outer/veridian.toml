@@ -1,0 +1,15 @@
+name = "echo/cancel-outer"
+version = "1.0.0"
+description = "Streams one delta, then blocks in a host.contract.call to echo_inner.wait."
+protocol = "veridian/1.1"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["run"]
+
+[capabilities]
+requires = ["contract:echo", "contract:echo_inner"]

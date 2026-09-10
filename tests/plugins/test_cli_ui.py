@@ -184,6 +184,86 @@ def test_interactive_ctrl_c_unwinds_one_turn_and_keeps_the_session(monkeypatch):
     assert events_seen == ["begin:do a thing", "interrupted"]  # ran the turn, caught, then /exit
 
 
+def test_interactive_ctrl_c_sends_cancel_to_the_live_stream(monkeypatch):
+    """A4 SEAM: when a run is streaming and Ctrl-C lands, the REPL cancels the live stream so the
+    orchestrator (and, via the kernel, its downstream calls) stop rather than run on detached."""
+    import asyncio
+
+    from veridian.cli import interactive
+
+    cancelled = {"count": 0}
+
+    class _FakeStream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            await asyncio.sleep(30)  # a run in progress: blocked producing the next delta
+
+        async def result(self):
+            await asyncio.sleep(30)
+
+        async def cancel(self):
+            cancelled["count"] += 1
+
+    class _FakeKernel:
+        _started = True
+
+        async def call_stream(self, *_a, **_k):
+            return _FakeStream()
+
+        async def stop(self):
+            pass
+
+    class _FakeRenderer:
+        def __init__(self):
+            self._prompts = iter(["do a thing", "/exit"])
+
+        def read_prompt(self):
+            return next(self._prompts)
+
+        def run_begin(self, goal):
+            pass
+
+        def run_interrupted(self):
+            pass
+
+        def clear_activity(self):
+            pass
+
+        def newline(self):
+            pass
+
+        def info(self, *_):
+            pass
+
+        def error(self, *_):
+            pass
+
+    loop = asyncio.new_event_loop()
+    real_ruc = loop.run_until_complete
+    state = {"fired": False}
+
+    def _ruc(future):
+        if not state["fired"]:
+            state["fired"] = True
+            try:
+                real_ruc(asyncio.wait_for(asyncio.shield(future), 0.2))
+            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+                pass
+            raise KeyboardInterrupt
+        return real_ruc(future)
+
+    monkeypatch.setattr(loop, "run_until_complete", _ruc)
+    try:
+        interactive._repl(loop, _FakeKernel(), object(), "/ws", 4, _FakeRenderer())
+    finally:
+        real_ruc(loop.shutdown_asyncgens())
+        loop.close()
+
+    assert cancelled["count"] == 1
+
+
 def test_run_translates_ctrl_c_into_a_clean_interrupt(monkeypatch):
     def _boom(coro=None, *_a, **_k):
         if coro is not None:
