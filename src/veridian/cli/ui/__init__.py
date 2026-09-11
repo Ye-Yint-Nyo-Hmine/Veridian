@@ -8,8 +8,10 @@ inference or orchestrator brick leaves everything in here untouched.
 from __future__ import annotations
 
 from veridian.cli.ui.activity import Activity
+from veridian.cli.ui.gitinfo import current_branch
 from veridian.cli.ui.markdown import model_markdown
 from veridian.cli.ui.renderer import Renderer
+from veridian.cli.ui.selector import select
 from veridian.cli.ui.theme import THEME
 
-__all__ = ["Renderer", "Activity", "model_markdown", "THEME"]
+__all__ = ["Renderer", "Activity", "model_markdown", "THEME", "current_branch", "select"]

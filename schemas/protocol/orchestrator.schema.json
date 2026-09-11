@@ -27,7 +27,11 @@
       "properties": {
         "status": { "type": "string", "enum": ["completed", "failed", "max_iterations"] },
         "iterations": { "type": "integer", "minimum": 0 },
-        "summary": { "type": "string" }
+        "summary": { "type": "string" },
+        "usage": {
+          "description": "Cumulative token counts across the run's inference calls. Omitted when no provider reported usage.",
+          "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage"
+        }
       }
     },
     "delta": {
@@ -36,8 +40,27 @@
       "required": ["request_id", "event", "data"],
       "properties": {
         "request_id": { "$ref": "https://veridian.dev/schemas/protocol/envelope.schema.json#/$defs/Id" },
-        "event": { "type": "string", "enum": ["step", "tool", "message", "log"] },
+        "event": { "type": "string", "enum": ["step", "tool", "message", "log", "usage"] },
         "data": { "type": "object" }
+      }
+    },
+    "compact_params": {
+      "description": "Ask the orchestrator to compress the working context it holds for a session. Optional method: additive, so a stack whose orchestrator predates it is not broken and a caller must degrade gracefully on method_not_found.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string" }
+      }
+    },
+    "compact_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["compacted", "noop", "unsupported"] },
+        "summary": { "type": "string" },
+        "turns_before": { "type": "integer", "minimum": 0 },
+        "turns_after": { "type": "integer", "minimum": 0 }
       }
     }
   }

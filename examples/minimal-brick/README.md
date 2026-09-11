@@ -18,4 +18,4 @@ uv run veridian brick conformance examples/minimal-brick
 
 - A brick is a directory with a `veridian.toml` and a spawn command — nothing more.
 - The TypeScript SDK (`@veridian/sdk`) gives you `serve({ name, version, implements, handlers })`.
-- `node --experimental-strip-types` runs `.ts` directly; there is no compile step in Milestone 1.
+- `node --experimental-strip-types` runs `.ts` directly; there is no compile step.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import textwrap
 from pathlib import Path
 
@@ -27,6 +28,40 @@ _FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "echo" / "containe
 def _needs_engine():
     if detect_container_engine() is None:
         pytest.skip("no container engine (docker/podman) on PATH")
+
+
+def _sweep_egress_resources(engine: str) -> list[str]:
+    """Force-remove any ``veridian-egress-*`` proxy container or network. Returns what it removed
+    so a test can assert nothing leaked."""
+    removed: list[str] = []
+    for kind, ls in (("container", ["ps", "-aq", "--filter", "name=veridian-egress-proxy-"]),
+                     ("network", ["network", "ls", "-q", "--filter", "name=veridian-egress-"])):
+        try:
+            out = subprocess.run([engine, *ls], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        for ident in out.stdout.split():
+            rm = ["rm", "-f", ident] if kind == "container" else ["network", "rm", ident]
+            try:
+                if subprocess.run([engine, *rm], capture_output=True, timeout=20).returncode == 0:
+                    removed.append(f"{kind}:{ident}")
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    return removed
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_egress_resources():
+    """Belt-and-suspenders around the code's own teardown: sweep before each test (clearing
+    anything an earlier crashed run left behind) and fail the test if it leaked on the way out."""
+    engine = detect_container_engine()
+    if engine is None:
+        yield
+        return
+    _sweep_egress_resources(engine)
+    yield
+    leaked = _sweep_egress_resources(engine)
+    assert not leaked, f"container test leaked egress resources: {leaked}"
 
 
 def _brick_dir(tmp_path: Path, isolation_toml: str) -> Path:
@@ -77,6 +112,17 @@ async def _probe(k: Kernel, host: str, port: int = 443) -> dict:
     return json.loads(res["output"])
 
 
+# The probe fixture makes a bare ``urllib`` HTTPS GET and calls the host "reachable" only on a
+# clean 2xx. ``one.one.one.one`` was a poor target for the allow case: the CONNECT tunnel opens
+# fine but Cloudflare answers a header-less GET with a real ``403``, so the probe reported
+# "unreachable" even though egress control was working -- it made a passing proxy look broken.
+# ``example.com`` (IANA's reserved domain) returns ``200`` to a bare GET and is about as stable a
+# target as exists; ``example.org`` is a different, unlisted host for the deny case (the proxy
+# refuses its CONNECT before the origin is ever contacted, so its own response never matters).
+_ALLOW_TARGET = "example.com"
+_DENY_TARGET = "example.org"
+
+
 async def test_network_false_denies_all_egress(tmp_path):
     _needs_engine()
     d = _brick_dir(
@@ -85,7 +131,7 @@ async def test_network_false_denies_all_egress(tmp_path):
     )
     k = await _kernel(tmp_path, d)
     try:
-        assert (await _probe(k, "one.one.one.one"))["reachable"] is False
+        assert (await _probe(k, _ALLOW_TARGET))["reachable"] is False
     finally:
         await k.stop()
 
@@ -95,11 +141,11 @@ async def test_allowlist_permits_listed_host_only(tmp_path):
     d = _brick_dir(
         tmp_path,
         '[isolation]\nmode = "container"\nimage = "python:3.13-slim"\n'
-        'network = true\nallow_hosts = ["one.one.one.one:443"]\n',
+        f'network = true\nallow_hosts = ["{_ALLOW_TARGET}:443"]\n',
     )
     k = await _kernel(tmp_path, d)
     try:
-        assert (await _probe(k, "one.one.one.one"))["reachable"] is True
-        assert (await _probe(k, "example.com"))["reachable"] is False
+        assert (await _probe(k, _ALLOW_TARGET))["reachable"] is True
+        assert (await _probe(k, _DENY_TARGET))["reachable"] is False
     finally:
         await k.stop()

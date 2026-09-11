@@ -11,5 +11,9 @@ SPEC = ContractSpec(
     schema_file="protocol/orchestrator.schema.json",
     methods=_methods(
         MethodSpec("run", streaming=True),
+        # Optional, additive: compress the working context the orchestrator holds for a session.
+        # A stack whose orchestrator does not implement it returns method_not_found; callers
+        # degrade rather than error. No wire-version bump.
+        MethodSpec("compact"),
     ),
 )

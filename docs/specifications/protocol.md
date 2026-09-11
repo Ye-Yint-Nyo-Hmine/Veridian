@@ -1,6 +1,6 @@
 # Veridian Protocol Specification
 
-**Status:** normative for Milestone 1. **Protocol version:** `veridian/1.1`.
+**Status:** normative. **Protocol version:** `veridian/1.1`.
 
 > **1.0 → 1.1.** Adds optional cancellation: the `$/cancel` notification (§5.1) and the
 > `request_cancelled` error (`-32009`). Method contracts and framing are unchanged. A `veridian/1.0`
@@ -126,7 +126,7 @@ Schema: `schemas/protocol/host.schema.json`.
 |---|---|---|---|
 | `host.log` | `{ level, message, fields? }` | — | Sent as a **notification**. `level` ∈ `debug info warning error`. |
 | `host.event.emit` | `{ type, payload? }` | `{}` | Publishes a custom event on the bus. `type` is namespaced by the brick. |
-| `host.permission.request` | `{ capability, reason? }` | `{ granted }` | Asks policy for a capability not in the initial grant. Milestone 1 policy answers from config; no interactive prompt. |
+| `host.permission.request` | `{ capability, reason? }` | `{ granted }` | Asks policy for a capability not in the initial grant. Policy answers from config; there is no interactive prompt. |
 | `host.contract.call` | `{ contract, method, params }` | `{ result }` \| error | **The core routing primitive** — see §7. |
 
 A brick MUST NOT call a host service before it has received `plugin.initialize`.

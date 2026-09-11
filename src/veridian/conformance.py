@@ -85,6 +85,7 @@ EXAMPLES: dict[str, dict[str, dict[str, Any]]] = {
     },
     "orchestrator": {
         "run": {"goal": "print hello", "workspace_root": ".", "limits": {"max_iterations": 1}},
+        "compact": {"session_id": "_probe"},
     },
 }
 

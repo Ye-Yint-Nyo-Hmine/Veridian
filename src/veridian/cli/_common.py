@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 from pathlib import Path
 
 from rich.console import Console
@@ -52,3 +54,55 @@ def stack_roots() -> list[SearchRoot]:
 
 def default_stack() -> Path:
     return stacks_root() / "default.toml"
+
+
+def describe_run_failure(exc) -> str:
+    """One line for a run that failed inside a brick: which brick, and where the full traceback
+    is. ``exc`` is the :class:`ProtocolError` surfaced by the orchestrator run.
+
+    A brick handler crash arrives with ``data`` carrying ``brick`` / ``method`` / ``traceback``
+    (the SDK attaches it and also writes the traceback to ``VERIDIAN_HOME/logs/brick-errors.log``).
+    Without that a run failure was just ``run failed: TypeError: ...`` with nothing to go on.
+    Set ``VERIDIAN_DEBUG`` to also print the traceback inline.
+    """
+    data = getattr(exc, "data", None) or {}
+    brick = data.get("brick")
+    msg = getattr(exc, "message", None) or str(exc)
+    head = f"run failed in brick {brick!r}: {msg}" if brick else f"run failed: {msg}"
+
+    tb = data.get("traceback")
+    if not tb:
+        return head
+
+    if os.environ.get("VERIDIAN_DEBUG"):
+        return f"{head}\n{tb.rstrip()}"
+
+    # Point at the log the SDK already wrote; fall back to writing our own copy if reading the
+    # home dir is possible here but the brick could not write it (e.g. a container brick).
+    try:
+        from veridian.plugin_runtime.home import veridian_home
+
+        path = veridian_home() / "logs" / "brick-errors.log"
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(f"\n===== {stamp}  {brick}  {data.get('method', '?')} =====\n{tb}")
+        return f"{head}\n  full traceback: {path}  (or set VERIDIAN_DEBUG=1 to print it here)"
+    except Exception:  # noqa: BLE001
+        return f"{head}\n  set VERIDIAN_DEBUG=1 to print the full traceback"
+
+
+def model_name(resolved) -> str:
+    """The model the inference binding will use, for the boot header and status line. Falls back
+    to the brick's short name, then ``?`` — never fabricates a model id."""
+    try:
+        binding = resolved.binding_for("inference")
+    except AttributeError:
+        return "?"
+    if binding is None:
+        return "?"
+    model = binding.config.get("model")
+    if model:
+        return str(model)
+    return binding.manifest.name.split("/")[-1]

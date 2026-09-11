@@ -30,6 +30,39 @@ MalformedSink = Callable[[str], None]
 _DEFAULT_KILL_TIMEOUT = 5.0
 
 
+def _detached_spawn_kwargs() -> dict[str, object]:
+    """Spawn kwargs that put a brick in its own process / signal group, so a Ctrl-C (or SIGINT)
+    aimed at the kernel's console is **not** also delivered straight to every brick.
+
+    This matters most on Windows. There, a console ``CTRL_C_EVENT`` goes to *every* process
+    attached to the console at once; a brick that gets it unwinds its ``asyncio.run`` and the
+    interpreter begins finalising while the SDK's daemon stdin-reader thread is still parked in a
+    blocking read — which finalisation races into a ``0xC0000005`` access violation. With
+    ``CREATE_NEW_PROCESS_GROUP`` the signal reaches only the kernel, which then shuts each brick
+    down in order (``plugin.shutdown`` + closing its stdin, which is what actually unblocks that
+    reader thread). POSIX gets the equivalent via ``start_new_session`` so the behaviour — bricks
+    are insulated from the foreground Ctrl-C and stopped only by the kernel — is the same on both.
+    """
+    if sys.platform == "win32":
+        # CREATE_NEW_PROCESS_GROUP (0x00000200): brick no longer receives the console's Ctrl-C.
+        return {"creationflags": 0x00000200}
+    return {"start_new_session": True}
+
+# Teardown must never be able to wedge the kernel. Every container-engine invocation on the
+# shutdown path is time-boxed, and the removal of a proxy's networks is ordered (container first,
+# then its networks) and retried: a just-removed ``--rm`` brick container can still hold an
+# endpoint on an ``--internal`` network for a beat, and ``network rm`` fails until it lets go.
+_ENGINE_CMD_TIMEOUT = 15.0
+_TEARDOWN_ATTEMPTS = 6
+_TEARDOWN_BACKOFF = 0.5
+_TEARDOWN_BACKOFF_CAP = 2.0
+# Hard ceiling on the whole post_run sequence, whatever the engine does. Past this, remaining
+# commands are still *attempted once* (so a leak is unlikely) but no longer retried or waited on.
+_TEARDOWN_TOTAL_BUDGET = 45.0
+# stderr fragments that mean "the thing you asked me to remove is already gone" — a success for us.
+_RESOURCE_ABSENT_MARKERS = ("no such", "not found")
+
+
 class BrickProcess:
     def __init__(
         self,
@@ -59,8 +92,13 @@ class BrickProcess:
 
         self._proc: asyncio.subprocess.Process | None = None
         self._stderr_task: asyncio.Task[None] | None = None
+        self._exit_task: asyncio.Task[None] | None = None
         self._endpoint: Endpoint | None = None
         self._exited = asyncio.Event()
+        # Serialises teardown so the exit-watcher and an explicit stop() cannot half-run it
+        # between them. Whoever gets here second still waits on the lock until the first has
+        # finished, so stop() never returns while networks are still being torn down.
+        self._post_run_lock = asyncio.Lock()
 
     async def start(self) -> Endpoint:
         if self._proc is not None:
@@ -79,6 +117,7 @@ class BrickProcess:
             stderr=asyncio.subprocess.PIPE,
             cwd=str(self.cwd),
             env=self.env,
+            **_detached_spawn_kwargs(),
         )
         assert self._proc.stdin and self._proc.stdout and self._proc.stderr
         transport = StdioTransport(self._proc.stdout, self._proc.stdin)
@@ -87,7 +126,7 @@ class BrickProcess:
         self._stderr_task = asyncio.create_task(
             self._drain_stderr(self._proc.stderr), name=f"stderr:{self.name}"
         )
-        asyncio.create_task(self._watch_exit(), name=f"exit-watch:{self.name}")
+        self._exit_task = asyncio.create_task(self._watch_exit(), name=f"exit-watch:{self.name}")
         return self._endpoint
 
     async def _watch_exit(self) -> None:
@@ -165,15 +204,32 @@ class BrickProcess:
             self._stderr_task.cancel()
         self._exited.set()
         await self._run_post_run()
+        # If the exit-watcher raced us to teardown, let it unwind now rather than leaving it
+        # pending on a loop that is about to close (that is what used to hang shutdown).
+        if self._exit_task is not None and not self._exit_task.done():
+            try:
+                await asyncio.wait_for(self._exit_task, _ENGINE_CMD_TIMEOUT)
+            except (asyncio.CancelledError, Exception):
+                pass
 
     async def _run_post_run(self) -> None:
-        """Run the teardown commands once, tolerating any failure (the resources may already be
-        gone, or may never have been created if pre_run half-failed)."""
-        if not self._post_run:
-            return
-        pending, self._post_run = self._post_run, ()
-        for cmd in pending:
-            await _run_engine_command(cmd, check=False)
+        """Run the teardown commands once, to completion, tolerating any failure.
+
+        Ordered and retried: the proxy container is removed first, then the networks it sat on,
+        and each command is retried while it keeps failing transiently (a just-removed ``--rm``
+        brick container can still hold an endpoint on an ``--internal`` network for a beat, and
+        ``docker network rm`` reports "has active endpoints" until it lets go). Serialised by a
+        lock so the exit-watcher and an explicit ``stop()`` cannot half-run it between them; the
+        second caller finds nothing left in ``_post_run`` but still blocks here until the first
+        has finished. Every engine call is time-boxed, so an unhealthy proxy or a wedged daemon
+        cannot stall shutdown."""
+        async with self._post_run_lock:
+            if not self._post_run:
+                return
+            pending, self._post_run = self._post_run, ()
+            deadline = asyncio.get_running_loop().time() + _TEARDOWN_TOTAL_BUDGET
+            for cmd in pending:
+                await _run_teardown_command(cmd, deadline=deadline)
 
 
 def base_env(passthrough: list[str], extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -190,6 +246,9 @@ def base_env(passthrough: list[str], extra: dict[str, str] | None = None) -> dic
     always = [
         "SYSTEMROOT", "SYSTEMDRIVE", "PATH", "PATHEXT", "TEMP", "TMP", "WINDIR", "COMSPEC",
         "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+        # So a brick resolves the same VERIDIAN_HOME as the kernel — it writes its crash log
+        # there. A path, not a secret (same rationale as the home vars above).
+        "VERIDIAN_HOME",
     ]
     env: dict[str, str] = {}
     for key in [*always, *passthrough]:
@@ -212,23 +271,72 @@ class EngineCommandError(RuntimeError):
     """A container-engine command run as a brick's ``pre_run`` failed."""
 
 
-async def _run_engine_command(cmd: tuple[str, ...], *, check: bool) -> int:
-    """Run one container-engine command to completion, capturing its output. With ``check`` a
-    non-zero exit raises :class:`EngineCommandError`; without it the exit code is just returned."""
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=base_env(_ENGINE_ENV_PASSTHROUGH),
-    )
-    _out, err = await proc.communicate()
-    rc = proc.returncode or 0
-    if check and rc != 0:
-        raise EngineCommandError(
-            f"`{' '.join(cmd)}` exited {rc}: {err.decode('utf-8', 'replace').strip()}"
+async def _engine_command(
+    cmd: tuple[str, ...], *, timeout: float | None = _ENGINE_CMD_TIMEOUT
+) -> tuple[int, str]:
+    """Run one container-engine command to completion. Returns ``(exit_code, stderr_text)``;
+    never raises for the command's own failure — callers decide what a non-zero code means.
+
+    With ``timeout`` set the child is killed and ``124`` returned if it overruns — the teardown
+    path relies on this so a wedged daemon or an unhealthy proxy can't stall shutdown. ``pre_run``
+    passes ``None``: standing up a proxy may legitimately pull an image first."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=base_env(_ENGINE_ENV_PASSTHROUGH),
         )
+    except OSError as exc:  # engine binary vanished mid-run, PATH race, &c.
+        return 1, str(exc)
+    if timeout is None:
+        _out, err = await proc.communicate()
+        return (proc.returncode or 0), err.decode("utf-8", "replace")
+    try:
+        _out, err = await asyncio.wait_for(proc.communicate(), timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        try:
+            await asyncio.wait_for(proc.communicate(), 5.0)
+        except (asyncio.TimeoutError, ProcessLookupError):
+            pass
+        return 124, f"`{' '.join(cmd)}` timed out after {timeout}s"
+    return (proc.returncode or 0), err.decode("utf-8", "replace")
+
+
+async def _run_engine_command(cmd: tuple[str, ...], *, check: bool) -> int:
+    """Run one container-engine command (a brick's ``pre_run``). With ``check`` a non-zero exit
+    raises :class:`EngineCommandError`; without it the exit code is just returned."""
+    rc, err = await _engine_command(cmd, timeout=None)
+    if check and rc != 0:
+        raise EngineCommandError(f"`{' '.join(cmd)}` exited {rc}: {err.strip()}")
     return rc
+
+
+async def _run_teardown_command(cmd: tuple[str, ...], *, deadline: float | None = None) -> None:
+    """Run one teardown command, retrying while it fails transiently. Removing a network the
+    brick's ``--rm`` container has not finished detaching from fails with "has active
+    endpoints"; a short bounded retry rides that out. "Already gone" counts as done. ``deadline``
+    (a loop clock value) caps the retrying — once it passes, the command has already been tried
+    at least once and we move on rather than let shutdown drag."""
+    loop = asyncio.get_running_loop()
+    delay = _TEARDOWN_BACKOFF
+    err = ""
+    for attempt in range(1, _TEARDOWN_ATTEMPTS + 1):
+        rc, err = await _engine_command(cmd)
+        if rc == 0 or any(marker in err.lower() for marker in _RESOURCE_ABSENT_MARKERS):
+            return
+        if attempt >= _TEARDOWN_ATTEMPTS or (deadline is not None and loop.time() >= deadline):
+            break
+        await asyncio.sleep(delay)
+        delay = min(delay * 1.5, _TEARDOWN_BACKOFF_CAP)
+    sys.stderr.write(
+        f"veridian: teardown command did not succeed: `{' '.join(cmd)}`: {err.strip()}\n"
+    )
 
 
 # ---------------------------------------------------------------------------------------------------

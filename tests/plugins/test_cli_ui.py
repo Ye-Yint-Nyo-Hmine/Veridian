@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 from veridian.cli.main import app
 from veridian.cli.ui import Renderer, model_markdown
-from veridian.cli.ui.theme import _Glyphs
+from veridian.cli.ui.theme import GLYPHS, _Glyphs
 
 runner = CliRunner()
 
@@ -44,7 +44,7 @@ def test_delta_stream_separates_the_four_channels():
     assert "write_file" in out and "a.py" in out  # tool call + compact input
     assert "wrote 5 bytes" in out                # tool result
     assert "suite" in out                        # model prose (markdown stripped of **)
-    assert "completed" in out and "3 iteration(s)" in out
+    assert "Generated in" in out and "completed" in out  # the completion line
 
 
 def test_tool_error_and_long_output_are_marked_and_clipped():
@@ -85,6 +85,183 @@ def test_glyphs_fall_back_to_ascii_when_stdout_cannot_encode(monkeypatch):
     monkeypatch.setattr("veridian.cli.ui.theme.sys.stdout", _Cp1252())
     g = _Glyphs()
     assert g.caret == ">" and g.arrow == "->" and g.bullet == "-"
+    assert g.response == "*" and g.nest == "\\_" and g.done == "=>" and g.mode == ">>"
+
+
+# -- boot screen ----------------------------------------------------------------
+
+
+class _Stack:
+    name = "local-ollama"
+
+
+def test_boot_screen_shows_real_identity_and_omits_unbacked_fields():
+    from pathlib import Path
+
+    r, buf = _renderer()
+    r.session_start(
+        stack=_Stack(), workspace=Path("/proj/veridian"), version="0.1.0",
+        session_id="abcd1234", model="qwen3.5:4b", mode="plan",
+    )
+    out = buf.getvalue()
+    assert "Veridian v-0.1.0" in out
+    assert "qwen3.5:4b" in out and "local-ollama" in out
+    assert "Session - abcd1234" in out
+    assert "Type a goal" in out and "/mode" in out
+    # no invented values for concepts Veridian v0 lacks
+    assert "reasoning" not in out.lower()
+    assert "skill" not in out.lower() and "mcp" not in out.lower()
+
+
+def test_boot_screen_logo_is_ascii_when_stdout_cannot_encode(monkeypatch):
+    from pathlib import Path
+
+    class _Cp1252:
+        encoding = "cp1252"
+
+    monkeypatch.setattr("veridian.cli.ui.theme.sys.stdout", _Cp1252())
+    r, buf = _renderer()
+    r.session_start(
+        stack=_Stack(), workspace=Path("/p"), version="0.1.0",
+        session_id="x", model="m", mode="plan",
+    )
+    assert "V E R I D I A N" in buf.getvalue()
+
+
+def test_tool_count_prints_only_the_real_count():
+    r, buf = _renderer()
+    r.tool_count(7)
+    out = buf.getvalue()
+    assert "7 tools" in out
+    assert "skill" not in out.lower() and "mcp" not in out.lower()
+
+
+# -- running layout -----------------------------------------------------------------
+
+
+def test_response_marker_precedes_the_first_model_message_only():
+    r, buf = _renderer()
+    r.run_begin("g")
+    r.delta("message", {"text": "first"})
+    r.delta("tool", {"name": "read_file", "input": {"path": "a"}})
+    r.delta("message", {"text": "second"})
+    out = buf.getvalue()
+    assert out.count(GLYPHS.response) == 1
+    assert GLYPHS.nest not in out  # only a call so far, no result line
+
+
+def test_nested_tool_result_uses_the_continuation_glyph():
+    r, buf = _renderer()
+    r.delta("tool", {"name": "grep", "output": "3 matches", "is_error": False})
+    assert GLYPHS.nest in buf.getvalue()
+
+
+def test_completion_line_carries_elapsed_and_clock_time():
+    import re
+
+    r, buf = _renderer()
+    r.run_begin("g")
+    r.run_end({"status": "completed", "iterations": 2, "summary": "ok"})
+    out = buf.getvalue()
+    assert GLYPHS.done in out and "Generated in" in out and "completed" in out
+    assert re.search(r"\d{1,2}:\d{2}\s?[AP]M", out)
+
+
+# -- footer (status + mode line) --------------------------------------------------
+
+
+def test_footer_omits_usage_until_a_provider_reports_it():
+    r, buf = _renderer()
+    r.footer(model="qwen", branch="main", mode="plan")
+    out = buf.getvalue()
+    assert "qwen" in out and "main" in out
+    assert "k/" not in out and "/1000k" not in out          # absent, not zero
+    assert "plan mode (/mode to cycle)" in out
+    # the honest guarantee: sandbox is enforced in plan mode, the write withholding is not
+    assert "sandbox enforced, write advisory" in out
+
+
+def test_footer_shows_context_usage_once_reported():
+    r, buf = _renderer()
+    r.delta("usage", {"input_tokens": 12000, "output_tokens": 400, "context_tokens": 12000, "context_window": 1000000})
+    r.footer(model="qwen", branch=None, mode="auto")
+    out = buf.getvalue()
+    assert "12k/1000k" in out
+    assert "auto mode" in out
+    assert "advisory" not in out  # only plan mode carries the caveat
+
+
+# -- git branch ----------------------------------------------------------------------
+
+
+def test_current_branch_reads_ref_detached_and_worktree(tmp_path):
+    from veridian.cli.ui.gitinfo import current_branch
+
+    assert current_branch(tmp_path) is None  # not a checkout
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/feature/x\n", encoding="utf-8")
+    assert current_branch(tmp_path) == "x"
+
+    (tmp_path / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n", encoding="utf-8")
+    assert current_branch(tmp_path) == "0123456"
+
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    real = tmp_path / ".git" / "worktrees" / "wt"
+    real.mkdir(parents=True)
+    (real / "HEAD").write_text("ref: refs/heads/wtbranch\n", encoding="utf-8")
+    (wt / ".git").write_text(f"gitdir: {real}\n", encoding="utf-8")
+    assert current_branch(wt) == "wtbranch"
+
+
+# -- mode ---------------------------------------------------------------------------
+
+
+def test_mode_helpers():
+    from veridian.cli.mode import next_mode, withheld_capabilities
+
+    assert next_mode("plan") == "auto"
+    assert next_mode("auto") == "plan"
+    assert withheld_capabilities("plan") == frozenset({"workspace:write", "contract:sandbox"})
+    assert withheld_capabilities("auto") == frozenset()
+
+
+def test_mode_command_cycles_and_restricts_kernel_capabilities():
+    from veridian.cli import interactive
+
+    calls: list = []
+    infos: list[str] = []
+
+    class _K:
+        _started = True
+
+        def restrict_capabilities(self, withheld):
+            calls.append(set(withheld))
+
+    class _R:
+        def __init__(self):
+            self._p = iter(["/mode", "/mode", "/exit"])
+
+        def read_prompt(self):
+            return next(self._p)
+
+        def info(self, text):
+            infos.append(text)
+
+        def newline(self):
+            pass
+
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+    try:
+        interactive._repl(loop, _K(), object(), "/ws", 4, _R())
+    finally:
+        loop.close()
+
+    assert infos == ["mode: auto", "mode: plan"]
+    assert calls == [set(), {"workspace:write", "contract:sandbox"}]
 
 
 # -- the bare entry point -------------------------------------------------------
@@ -130,6 +307,12 @@ def test_interactive_ctrl_c_unwinds_one_turn_and_keeps_the_session(monkeypatch):
         async def call_stream(self, *_a, **_k):
             await asyncio.sleep(30)  # a real run in progress when the signal lands
 
+        async def call(self, *_a, **_k):
+            return {"tools": []}
+
+        def restrict_capabilities(self, *_a, **_k):
+            pass
+
         async def stop(self):
             events_seen.append("stopped")
 
@@ -139,6 +322,9 @@ def test_interactive_ctrl_c_unwinds_one_turn_and_keeps_the_session(monkeypatch):
 
         def read_prompt(self):
             return next(self._prompts)
+
+        def tool_count(self, *_):
+            pass
 
         def run_begin(self, goal):
             events_seen.append(f"begin:{goal}")
@@ -212,6 +398,12 @@ def test_interactive_ctrl_c_sends_cancel_to_the_live_stream(monkeypatch):
         async def call_stream(self, *_a, **_k):
             return _FakeStream()
 
+        async def call(self, *_a, **_k):
+            return {"tools": []}
+
+        def restrict_capabilities(self, *_a, **_k):
+            pass
+
         async def stop(self):
             pass
 
@@ -221,6 +413,9 @@ def test_interactive_ctrl_c_sends_cancel_to_the_live_stream(monkeypatch):
 
         def read_prompt(self):
             return next(self._prompts)
+
+        def tool_count(self, *_):
+            pass
 
         def run_begin(self, goal):
             pass

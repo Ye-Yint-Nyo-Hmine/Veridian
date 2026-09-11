@@ -54,3 +54,13 @@ class LoopbackTransport(Transport):
 @pytest.fixture
 def loopback() -> tuple[LoopbackTransport, LoopbackTransport]:
     return LoopbackTransport.pair()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_veridian_home(tmp_path_factory, monkeypatch):
+    """Keep session metadata (``~/.veridian/sessions``) and any installed bricks/stacks out of the
+    real home during plugin tests — the interactive session now writes a resumable record on
+    start."""
+    home = tmp_path_factory.mktemp("veridian-home")
+    monkeypatch.setenv("VERIDIAN_HOME", str(home))
+    return home

@@ -27,7 +27,7 @@ await serve({
 
 ## Running a brick
 
-Milestone 1 runs bricks with Node's type stripping — no build step:
+Bricks run under Node's type stripping — no build step:
 
 ```
 node --experimental-strip-types brick.ts

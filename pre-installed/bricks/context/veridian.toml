@@ -1,0 +1,17 @@
+name = "context/repo-map"
+version = "0.1.0"
+description = "Repository awareness: a compact repo map, keyword-ranked selective file retrieval, symbol outlines for large files, and AGENT.md guideline loading (user + workspace)."
+protocol = "veridian/1.1"
+runtime = "python"
+
+env_passthrough = ["VERIDIAN_HOME"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "context"
+methods = ["index", "retrieve", "invalidate"]
+
+[capabilities]
+requires = ["workspace:read"]

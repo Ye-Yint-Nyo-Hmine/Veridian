@@ -1,0 +1,41 @@
+# Veridian's pre-installed default: an autonomous coding agent.
+#
+# It binds the three pre-installed bricks (toolkit, context, orchestrator) plus the built-in
+# sandbox, conversation and memory bricks. There is deliberately NO inference binding, no model
+# id, and no base URL anywhere in this file — the agent architecture is provider-agnostic and the
+# inference binding is left for the user or a setup flow to add, e.g.:
+#
+#   [bindings.inference]
+#   brick = "bricks/inference/local"
+#   config = { model = "<your-model>", base_url = "<your-endpoint>" }
+#
+# Bricks are referenced by path relative to the repo root, so the pre-installed/ ones bind even
+# though pre-installed/ is not a brick search root.
+
+[stack]
+name = "autonomous"
+description = "Autonomous coding agent: toolkit + repo-map context + verifying orchestrator loop. Add an inference binding to run it."
+
+[policy]
+grant = [
+  "network",
+  "process:spawn",
+  "workspace:read",
+  "workspace:write",
+  "contract:inference",
+  "contract:context",
+  "contract:tools",
+  "contract:sandbox",
+  "contract:memory",
+  "contract:conversation",
+]
+
+[bindings]
+orchestrator = "pre-installed/bricks/orchestrator"
+tools = "pre-installed/bricks/toolkit"
+context = "pre-installed/bricks/context"
+sandbox = "bricks/sandbox/local"
+memory = "bricks/memory/ephemeral"
+conversation = "bricks/conversation/sqlite"
+
+

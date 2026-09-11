@@ -19,10 +19,31 @@ _PERMISSION_DENIED = -32001
 _MAX_ITERATIONS = 12
 
 
+def _turn_text(message: dict) -> str:
+    """The plain text of a stored turn, blocks flattened."""
+    content = message.get("content", "")
+    if isinstance(content, list):
+        return " ".join(
+            b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+        )
+    return str(content)
+
+
+def _after_last_compaction(entries: list[dict]) -> list[dict]:
+    """The tail of ``entries`` from the most recent ``metadata.kind == "compaction"`` marker
+    onward (marker included, since its summary *is* the compressed context). The whole list when
+    there is no marker."""
+    last = -1
+    for i, e in enumerate(entries):
+        if (e.get("metadata") or {}).get("kind") == "compaction":
+            last = i
+    return entries[last:] if last >= 0 else entries
+
+
 class OrchestratorDefault(Brick):
     name = "orchestrator/default"
     version = "0.1.0"
-    implements = {"orchestrator": ["run"]}
+    implements = {"orchestrator": ["run", "compact"]}
 
     async def _try(self, contract: str, method: str, params: dict):
         """host.contract.call, returning None if the contract simply isn't bound."""
@@ -73,12 +94,22 @@ class OrchestratorDefault(Brick):
         if plan:
             await emit("step", kind="plan", steps=[s["description"] for s in plan["steps"]])
 
+        # context window for the bound model, if the inference brick reports its catalogue. Used
+        # only to annotate the usage deltas; absent is fine.
+        context_window = None
+        models = await self._opt("inference", "models", {})
+        for m in (models or {}).get("models", []):
+            if m.get("context_window"):
+                context_window = m["context_window"]
+                break
+
         # 3. tool catalogue -------------------------------------------------------------
         tool_listing = await self._try("tools", "list", {})
         tool_schemas = list(tool_listing["tools"]) if tool_listing else []
-        # If a sandbox is bound, offer a run_command tool backed by sandbox.exec, so an agent can
-        # both edit files (tools brick) and run commands in the same loop.
-        sandbox_probe = await self._try("sandbox", "reset", {})
+        # If a sandbox is bound *and reachable*, offer a run_command tool backed by sandbox.exec.
+        # ``_opt`` (not ``_try``) so a session that withholds ``contract:sandbox`` — e.g. plan
+        # mode — degrades to no command execution instead of failing the run.
+        sandbox_probe = await self._opt("sandbox", "reset", {})
         self._has_sandbox = sandbox_probe is not None
         if self._has_sandbox:
             tool_schemas.append(
@@ -105,11 +136,16 @@ class OrchestratorDefault(Brick):
             }
         ]
 
-        # prior turns from local chat history, if a `conversation` brick is bound
+        # prior turns from local chat history, if a `conversation` brick is bound. When the session
+        # has been /compact-ed, load only the compaction summary and everything after it.
         history = await self._opt("conversation", "load", {"session_id": session_id, "limit": 40})
         if history and history.get("messages"):
-            transcript.extend(e["message"] for e in history["messages"])
-            await emit("log", message=f"loaded {len(history['messages'])} prior turn(s) from session {session_id!r}")
+            entries = _after_last_compaction(history["messages"])
+            transcript.extend(e["message"] for e in entries)
+            note = f"loaded {len(entries)} prior turn(s) from session {session_id!r}"
+            if len(entries) < len(history["messages"]):
+                note += " (post-compaction)"
+            await emit("log", message=note)
 
         transcript.append({"role": "user", "content": goal})
         # persist the user turn now, so it survives even a run that fails at inference
@@ -120,6 +156,9 @@ class OrchestratorDefault(Brick):
         iterations = 0
         status = "failed"
         summary = ""
+        in_tot = 0
+        out_tot = 0
+        saw_usage = False
 
         while iterations < max_iter:
             iterations += 1
@@ -139,6 +178,24 @@ class OrchestratorDefault(Brick):
             result = await self.host.contract_call("inference", "generate", gen_params)
             message = result["message"]
             transcript.append(message)
+
+            # token usage — only if the provider reported it. A provider that reports nothing
+            # emits no usage delta at all, so the UI shows the field as absent, not zero.
+            usage = result.get("usage")
+            if usage:
+                saw_usage = True
+                turn_in = int(usage.get("input_tokens", 0) or 0)
+                in_tot += turn_in
+                out_tot += int(usage.get("output_tokens", 0) or 0)
+                data = {
+                    "input_tokens": in_tot,
+                    "output_tokens": out_tot,
+                    # context fill = tokens the last request actually carried
+                    "context_tokens": turn_in,
+                }
+                if context_window:
+                    data["context_window"] = context_window
+                await emit("usage", **data)
 
             blocks = message["content"] if isinstance(message["content"], list) else [
                 {"type": "text", "text": message["content"]}
@@ -206,7 +263,75 @@ class OrchestratorDefault(Brick):
             {"session_id": session_id, "message": {"role": "assistant", "content": summary}},
         )
 
-        return {"status": status, "iterations": iterations, "summary": summary}
+        out: dict = {"status": status, "iterations": iterations, "summary": summary}
+        if saw_usage:
+            out["usage"] = {"input_tokens": in_tot, "output_tokens": out_tot}
+        return out
+
+    @rpc("orchestrator.compact")
+    async def compact(self, params, ctx):
+        """Compress the working context this orchestrator holds for a session.
+
+        The default loop keeps no state between runs beyond the local ``conversation`` log, so
+        compaction summarises the turns since the last compaction and appends the summary as one
+        turn tagged ``metadata.kind = "compaction"``. Later ``run`` calls load only that summary
+        and what follows it. Non-destructive: the verbatim turns stay in the log.
+        """
+        session_id = str(params.get("session_id") or self.config.get("session_id") or "default")
+
+        history = await self._opt("conversation", "load", {"session_id": session_id})
+        if not history or not history.get("messages"):
+            return {"status": "noop", "turns_before": 0, "turns_after": 0}
+
+        live = _after_last_compaction(history["messages"])
+        if live and (live[0].get("metadata") or {}).get("kind") == "compaction":
+            body = live[1:]  # already-compacted; only compress what came after the marker
+        else:
+            body = live
+        if len(body) <= 2:
+            return {"status": "noop", "turns_before": len(body), "turns_after": len(body)}
+
+        convo = "\n\n".join(f"{e['message'].get('role', '?')}: {_turn_text(e['message'])}" for e in body)
+        gen = await self.host.contract_call(
+            "inference",
+            "generate",
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You compress conversations. Reply with a compact summary that keeps "
+                            "decisions, file paths, and open threads so a later session can "
+                            "continue. No preamble."
+                        ),
+                    },
+                    {"role": "user", "content": convo},
+                ],
+                "max_tokens": 512,
+            },
+        )
+        msg = gen["message"]
+        blocks = msg["content"] if isinstance(msg["content"], list) else [
+            {"type": "text", "text": msg["content"]}
+        ]
+        summary = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+        summary = summary or "(summary unavailable)"
+
+        await self._opt(
+            "conversation",
+            "append",
+            {
+                "session_id": session_id,
+                "message": {"role": "assistant", "content": summary},
+                "metadata": {"kind": "compaction"},
+            },
+        )
+        return {
+            "status": "compacted",
+            "summary": summary,
+            "turns_before": len(body),
+            "turns_after": 1,
+        }
 
 
 if __name__ == "__main__":

@@ -27,11 +27,14 @@
     "generate_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["message", "model", "usage", "stop_reason"],
+      "required": ["message", "model", "stop_reason"],
       "properties": {
         "message": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Message" },
         "model": { "type": "string" },
-        "usage": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage" },
+        "usage": {
+          "description": "Token counts for this turn. Optional: omitted entirely when the provider reports no usage, so a consumer renders it as absent rather than zero.",
+          "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/Usage"
+        },
         "stop_reason": { "$ref": "https://veridian.dev/schemas/protocol/common.schema.json#/$defs/StopReason" }
       }
     },

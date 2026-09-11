@@ -1,0 +1,40 @@
+
+ ⡇⢸ ⣏⡉ ⣏⡱ ⡇ ⡏⢱ ⡇ ⣎⣱ ⡷⣸
+ ⠸⠃ ⠧⠤ ⠇⠱ ⠇ ⠧⠜ ⠇ ⠇⠸ ⠇⠹
+
+Veridian v-X.X.X
+Model name | Reasoning Enabled or not · stack name
+~\path in which Veridian is being ran
+Session - Session ID
+X tools | X skills | X MCPs
+
+
+<message_history>
+
+> hi
+
+◈ Hi! What can I help you with today?
+
+↠ Generated in 3s · done 11:22 AM
+
+> Create a refrence_file.txt
+
+◈ Searching if refrence_file.txt exist | read 1 file, listed 2 directories, ran 1 shell command
+    ∟ Creating refrence_file.txt | ran 1 shell command
+
+↠ Generated in 12s · done 11:23 AM
+
+
+
+
+
+  Model | 12k/1000k                                                                                                                                                    
+  ⏵⏵ auto mode (/mode to cycle) 
+
+~ ☕ Can you read @refrence_file.txt and build a Fibonnaci Sequence?
+
+     ◇ Reading refrence_file.txt
+         ∟ Running one shell command ...
+
+
+

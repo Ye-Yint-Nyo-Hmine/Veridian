@@ -85,6 +85,11 @@ A brick name in a stack file is resolved against three roots, in order — **fir
 | 2 | `user` | `$VERIDIAN_HOME/bricks` (what `veridian brick add` installs) |
 | 3 | `builtin` | the `bricks/` Veridian ships |
 
+A stack name given to `--stack` resolves the same way, over `stacks/` directories, with one extra
+root at the end: `pre-installed/stacks`. So `--stack autonomous` finds the pre-installed agent's
+stack. Note that stack lives there deliberately without an inference binding, so it refuses to run
+until you add one — copy it rather than binding it directly.
+
 `veridian brick which <name>` prints this list and marks the copy that would load — run it when a
 brick isn't the one you expected:
 
@@ -190,7 +195,7 @@ await serve({
 });
 ```
 
-Run with `node --experimental-strip-types brick.ts` — no build step in Milestone 1. Use type-only
+Run with `node --experimental-strip-types brick.ts` — there is no build step. Use type-only
 TS syntax (no `enum`, no parameter properties) so stripping is enough.
 
 ## Rules
@@ -198,7 +203,15 @@ TS syntax (no `enum`, no parameter properties) so stripping is enough.
 1. **Schemas are the source of truth.** Validate against `schemas/`, not against a language type.
 2. **Call other bricks only through `host.contract.call`.** Never assume which brick is bound.
 3. **`stdout` is protocol only.** Log to `stderr` (the kernel forwards it to the event bus).
-4. **Windows-safe.** No POSIX signals; expect `terminate()` then a hard kill on shutdown.
+4. **If you shell out, pass `stdin=DEVNULL`.** A child process inherits your stdin, which is the
+   JSON-RPC channel. Anything the child reads from it corrupts the protocol, and the failure looks
+   like a mysterious framing error rather than a subprocess bug.
+5. **Windows-safe.** No POSIX signals; expect `terminate()` then a hard kill on shutdown. Bricks are
+   spawned detached from the kernel's signal group, so a console Ctrl-C does not reach you —
+   cancellation arrives as `$/cancel`, and the SDK turns it into task cancellation for you.
+6. **Never assume a provider field is a string.** Real models return `null` where a schema allows a
+   string, especially small local ones. Normalise where you parse a provider result, not at each
+   use site.
 
 ## Before you ship
 

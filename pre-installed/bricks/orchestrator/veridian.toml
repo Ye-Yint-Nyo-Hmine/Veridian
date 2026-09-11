@@ -1,0 +1,23 @@
+name = "orchestrator/autonomous"
+version = "0.1.0"
+description = "An autonomous coding loop: inspect, plan objectives, edit, run, verify each objective against real evidence, recover from failures, compact context. A brick — replace it to replace the agent architecture."
+protocol = "veridian/1.1"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[capabilities]
+requires = [
+  "contract:inference",
+  "contract:context",
+  "contract:planner",
+  "contract:tools",
+  "contract:memory",
+  "contract:sandbox",
+  "contract:conversation",
+]
+
+[[implements]]
+contract = "orchestrator"
+methods = ["run", "compact"]

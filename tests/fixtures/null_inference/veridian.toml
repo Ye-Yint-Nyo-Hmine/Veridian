@@ -1,0 +1,12 @@
+name = "fixtures/null-inference"
+version = "0.0.1"
+description = "An inference brick that returns an assistant message with null content, the way some small local models (a reasoning model that spent its whole budget thinking) actually do on the wire. The orchestrator must survive it."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "inference"
+methods = ["generate", "models"]

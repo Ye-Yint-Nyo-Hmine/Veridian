@@ -156,6 +156,10 @@ class Endpoint:
     def closed(self) -> bool:
         return self._closed.is_set()
 
+    async def wait_closed(self) -> None:
+        """Block until the peer stream has ended (EOF, reset, or :meth:`aclose`)."""
+        await self._closed.wait()
+
     def on_request(self, handler: RequestHandler) -> None:
         self._request_handler = handler
 

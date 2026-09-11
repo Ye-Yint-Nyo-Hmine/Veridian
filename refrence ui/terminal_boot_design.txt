@@ -1,0 +1,19 @@
+
+ ⡇⢸ ⣏⡉ ⣏⡱ ⡇ ⡏⢱ ⡇ ⣎⣱ ⡷⣸
+ ⠸⠃ ⠧⠤ ⠇⠱ ⠇ ⠧⠜ ⠇ ⠇⠸ ⠇⠹
+
+Veridian v-X.X.X
+Model name | Reasoning Enabled or not · stack name
+~\path in which Veridian is being ran
+Session - Session ID
+X tools | X skills | X MCPs
+
+
+
+
+  Model | 3k/1000k | main                                                                                                                                                    
+  ⏵⏵ plan mode (/mode to cycle) 
+
+~ ☕
+
+

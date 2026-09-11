@@ -1,0 +1,12 @@
+name = "echo/raises"
+version = "1.0.0"
+description = "An SDK echo brick whose 'say' handler raises an ordinary exception, to check that a brick-handler crash is surfaced with its name and traceback (Bug 3)."
+protocol = "veridian/1.0"
+runtime = "python"
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "echo"
+methods = ["say"]

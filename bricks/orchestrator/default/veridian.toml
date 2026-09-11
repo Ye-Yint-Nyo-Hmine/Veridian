@@ -20,4 +20,4 @@ requires = [
 
 [[implements]]
 contract = "orchestrator"
-methods = ["run"]
+methods = ["run", "compact"]

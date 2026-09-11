@@ -28,7 +28,7 @@ providers = [
 ]
 
 [project.scripts]
-veridian = "veridian.cli.main:app"
+veridian = "veridian.cli.main:run"
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]

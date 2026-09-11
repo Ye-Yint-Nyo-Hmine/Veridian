@@ -46,10 +46,12 @@ def brick_search_roots(*, repo_root: Path, project_dir: Path | None = None) -> l
 
 def stack_search_roots(*, repo_root: Path, project_dir: Path | None = None) -> list[SearchRoot]:
     """The ordered roots a stack ``--stack <name>`` is resolved against, same precedence as
-    bricks: project-local, then user, then the stacks Veridian ships."""
+    bricks: project-local, then user, then the stacks Veridian ships, then the pre-installed
+    autonomous-agent stacks under ``pre-installed/stacks``."""
     project = (project_dir or Path.cwd()).resolve()
     return [
         SearchRoot("project", project / "stacks"),
         SearchRoot("user", home_stacks()),
         SearchRoot("builtin", (repo_root / "stacks").resolve()),
+        SearchRoot("pre-installed", (repo_root / "pre-installed" / "stacks").resolve()),
     ]

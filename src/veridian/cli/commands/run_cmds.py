@@ -8,12 +8,19 @@ scripting.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from pathlib import Path
 
 import typer
 
 from veridian import __version__
-from veridian.cli._common import console, default_stack, err_console
+from veridian.cli._common import (
+    console,
+    default_stack,
+    describe_run_failure,
+    err_console,
+    model_name,
+)
 from veridian.cli.ui import Renderer
 from veridian.contracts.errors import CONTRACT_NOT_BOUND, ProtocolError
 from veridian.kernel import Kernel, load_stack, resolve_stack_ref
@@ -60,7 +67,15 @@ async def _run(resolved, goal: str, workspace: Path, max_iterations: int, render
 
     kernel.events.subscribe("brick.log", _on_log)
 
-    renderer.session_start(stack=resolved, workspace=workspace, version=__version__)
+    # one-shot: no mode cycling, so the session runs at 'auto' (the stack's full grant).
+    renderer.session_start(
+        stack=resolved,
+        workspace=workspace,
+        version=__version__,
+        session_id=uuid.uuid4().hex[:8],
+        model=model_name(resolved),
+        mode="auto",
+    )
     try:
         await kernel.start()
     except (ProtocolError, UnresolvedEnvironment) as exc:
@@ -81,7 +96,7 @@ async def _run(resolved, goal: str, workspace: Path, max_iterations: int, render
         renderer.run_end(result)
         return _EXIT_CODE.get(result.get("status", ""), 1)
     except ProtocolError as exc:
-        renderer.error(exc.message if exc.code == CONTRACT_NOT_BOUND else f"run failed: {exc}")
+        renderer.error(exc.message if exc.code == CONTRACT_NOT_BOUND else describe_run_failure(exc))
         return 1
     finally:
         await kernel.stop()

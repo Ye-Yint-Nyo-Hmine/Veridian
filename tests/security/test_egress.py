@@ -36,6 +36,30 @@ def test_host_allowed_pins_port_when_given():
     assert not host_allowed(al, "api.openai.com", 80)
 
 
+def test_allowlist_matching_full_matrix():
+    """The property the container test proves end-to-end, pinned hermetically: a listed host is
+    allowed, an unlisted one is not, and a near-miss must not slip through. Covers the CONNECT
+    target as the proxy sees it -- ``host`` with and without a port."""
+    al = parse_allowlist("example.com:443, cdn.example.net")
+
+    # listed host:port -> allowed on that port, denied on any other
+    assert host_allowed(al, "example.com", 443)
+    assert not host_allowed(al, "example.com", 8443)
+
+    # listed bare host -> allowed on whatever port the CONNECT names
+    assert host_allowed(al, "cdn.example.net", 443)
+    assert host_allowed(al, "cdn.example.net", 8443)
+
+    # a host that simply is not on the list
+    assert not host_allowed(al, "example.org", 443)
+
+    # near-misses: a substring / suffix / prefix of a listed host is a different host
+    assert not host_allowed(al, "notexample.com", 443)          # prefix glued on
+    assert not host_allowed(al, "example.com.attacker.tld", 443)  # listed host as a label
+    assert not host_allowed(al, "evil-cdn.example.net", 443)     # shares the registrable domain
+    assert not host_allowed(al, "x.example.com", 443)            # subdomain, not the apex
+
+
 # -- plan_egress -------------------------------------------------------------------------------------
 
 

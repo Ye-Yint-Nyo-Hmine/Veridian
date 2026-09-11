@@ -1,0 +1,17 @@
+name = "tools/toolkit"
+version = "0.1.0"
+description = "One tools brick: filesystem (read/write/edit/list/search), terminal via the sandbox contract, git (status/diff/log/add/commit), and user skills exposed as tools."
+protocol = "veridian/1.1"
+runtime = "python"
+
+env_passthrough = ["VERIDIAN_HOME"]
+
+[spawn]
+command = ["${python}", "brick.py"]
+
+[[implements]]
+contract = "tools"
+methods = ["list", "invoke"]
+
+[capabilities]
+requires = ["workspace:read", "workspace:write", "process:spawn", "contract:sandbox"]

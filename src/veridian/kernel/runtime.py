@@ -9,6 +9,7 @@ not add anything here that a specific brick would care about.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ from veridian.kernel.events import (
 )
 from veridian.kernel.lifecycle import BrickSupervisor, RestartPolicy
 from veridian.plugin_runtime.registry import BrickHandle, PluginRegistry
-from veridian.security.capabilities import granted_by_any
+from veridian.security.capabilities import covers, granted_by_any
 from veridian.security.permissions import EffectiveCapabilities
 
 # Contracts whose bricks should come up last, because they drive the others.
@@ -57,6 +58,11 @@ class Kernel:
         self._restart_policy = restart_policy or RestartPolicy()
         self._supervisors: list[BrickSupervisor] = []
         self._effective: dict[str, list[str]] = {}
+        # Capabilities the host asks to withhold from every brick on top of policy (the
+        # interactive session's mode uses this). Opaque strings — the kernel never interprets
+        # what they mean, only that a withheld capability is dropped from every brick's
+        # effective set and cannot be re-granted dynamically.
+        self._restricted: set[str] = set()
         self._started = False
 
     # -- construction helpers --------------------------------------------------------
@@ -79,9 +85,7 @@ class Kernel:
         )
         for binding in order:
             manifest = binding.manifest
-            effective = sorted(
-                self.stack.policy.effective_capabilities(manifest.name, manifest.requires)
-            )
+            effective = self._compute_effective(manifest.name, manifest.requires)
             self._effective[manifest.name] = effective
             supervisor = BrickSupervisor(
                 binding=binding,
@@ -108,6 +112,46 @@ class Kernel:
             self.registry.bind(contract, handle)
 
         return _rebind
+
+    async def rebind(self, contract: str, *, config: dict[str, Any]) -> None:
+        """Restart the brick bound to ``contract`` with ``config`` merged into its binding config,
+        through a fresh supervisor.
+
+        The new supervisor is started *before* the old one is touched: if it fails to come up this
+        raises with the previous brick still bound and serving. Only on a clean start is the old
+        brick stopped, unbound, and replaced. The interactive ``/model`` switch relies on this —
+        a failed switch must leave the previous model working.
+        """
+        if not self._started:
+            raise ProtocolError(CONTRACT_NOT_BOUND, "kernel not started")
+        old = next((s for s in self._supervisors if s.contract == contract), None)
+        if old is None:
+            raise ProtocolError(CONTRACT_NOT_BOUND, f"no brick bound to contract {contract!r}")
+
+        new_binding = dataclasses.replace(
+            old.binding, config={**old.binding.config, **config}
+        )
+        manifest = new_binding.manifest
+        effective = self._compute_effective(manifest.name, manifest.requires)
+        new_sup = BrickSupervisor(
+            binding=new_binding,
+            workspace_root=self.workspace_root,
+            effective_capabilities=effective,
+            bus=self.events,
+            router=self._route_host_call,
+            restart_policy=self._restart_policy,
+        )
+        new_sup.on_rebind = self._make_rebind(contract)
+        handle = await new_sup.start()  # BrickStartError / ProtocolError here => nothing swapped
+
+        await old.stop()
+        self._supervisors[self._supervisors.index(old)] = new_sup
+        self.registry.bind(contract, handle)
+        self._effective[manifest.name] = effective
+        for i, b in enumerate(self.stack.bindings):
+            if b.contract == contract:
+                self.stack.bindings[i] = new_binding
+                break
 
     async def stop(self) -> None:
         if not self._started:
@@ -191,7 +235,36 @@ class Kernel:
             fields=params.get("fields", {}),
         )
 
+    def _compute_effective(self, name: str, requires: list[str]) -> list[str]:
+        """A brick's effective capabilities: policy (manifest ∩ grant − deny), then minus
+        anything the host has asked to withhold via :meth:`restrict_capabilities`."""
+        allowed = self.stack.policy.effective_capabilities(name, requires)
+        allowed = {c for c in allowed if not any(covers(w, c) for w in self._restricted)}
+        return sorted(allowed)
+
+    def restrict_capabilities(self, withheld) -> None:
+        """Withhold ``withheld`` from every brick, on top of policy, and forbid re-granting them
+        dynamically. Replaces any previous restriction (pass an empty iterable to clear it).
+
+        Safe before or after :meth:`start`: called before, the set is applied as each brick comes
+        up; called after, every running brick's effective set and its supervisor are updated in
+        place. Capabilities are opaque strings here — the kernel does not know what they gate.
+        """
+        self._restricted = set(withheld)
+        if not self._started:
+            return
+        by_name = {b.manifest.name: b.manifest for b in self.stack.active()}
+        for name in list(self._effective):
+            manifest = by_name.get(name)
+            requires = manifest.requires if manifest else []
+            self._effective[name] = self._compute_effective(name, requires)
+            for sup in self._supervisors:
+                if sup.name == name:
+                    sup.effective_capabilities = self._effective[name]
+
     def _grant_dynamic(self, caller: str, capability: str) -> bool:
+        if any(covers(w, capability) for w in self._restricted):
+            return False
         policy = self.stack.policy
         granted = policy.granted_to(caller)
         denied = policy.denied_to(caller)
