@@ -38,6 +38,24 @@ class UnresolvedEnvironment(RuntimeError):
             f"(refusing to fall back to the kernel interpreter)"
         )
 
+
+class IncompatibleVeridianVersion(RuntimeError):
+    """A brick's ``[requires].veridian`` specifier does not admit the running Veridian version.
+
+    Raised while a stack resolves its bindings — before any brick is spawned — so the failure
+    names both the brick's requirement and the version actually running, instead of surfacing
+    later as an obscure runtime error.
+    """
+
+    def __init__(self, brick: str, requirement: str, running: str) -> None:
+        self.brick = brick
+        self.requirement = requirement
+        self.running = running
+        super().__init__(
+            f"{brick}: requires Veridian {requirement!r} but this is Veridian {running}; "
+            f"install a compatible version of the brick or upgrade Veridian"
+        )
+
 # Where `veridian brick install` records a brick's resolved private environment. Kept inside the
 # brick directory (already git-ignored) so the environment travels with the brick and nothing
 # central has to be consulted at spawn time.
@@ -101,6 +119,7 @@ class Manifest:
     runtime: str = "other"
     spawn_cwd: str | None = None
     requires: list[str] = field(default_factory=list)
+    requires_veridian: str | None = None
     env_passthrough: list[str] = field(default_factory=list)
     optional_dependencies: list[str] = field(default_factory=list)
     dependencies: dict[str, Any] = field(default_factory=dict)
@@ -111,6 +130,24 @@ class Manifest:
         if contract not in self.implements:
             return False
         return method is None or method in self.implements[contract]
+
+    def check_veridian_compat(self, running_version: str) -> None:
+        """Raise :class:`IncompatibleVeridianVersion` when ``[requires].veridian`` excludes
+        ``running_version``. A no-op when the brick declares no requirement."""
+        if not self.requires_veridian:
+            return
+        from veridian.plugin_runtime.versions import InvalidVersionSpec, satisfies
+
+        try:
+            ok = satisfies(running_version, self.requires_veridian)
+        except InvalidVersionSpec as exc:
+            raise IncompatibleVeridianVersion(
+                self.name, self.requires_veridian, running_version
+            ) from exc
+        if not ok:
+            raise IncompatibleVeridianVersion(
+                self.name, self.requires_veridian, running_version
+            )
 
     def assert_egress_sane(self) -> None:
         """Refuse ``isolation.network = true`` with no ``allow_hosts`` for a brick that also handles
@@ -252,6 +289,7 @@ def parse_manifest(data: dict[str, Any], directory: Path) -> Manifest:
         description=data.get("description", ""),
         runtime=data.get("runtime", "other"),
         requires=list(caps.get("requires", [])),
+        requires_veridian=(data.get("requires") or {}).get("veridian"),
         env_passthrough=list(data.get("env_passthrough", [])),
         optional_dependencies=list(data.get("optional_dependencies", [])),
         dependencies=dict(data.get("dependencies", {})),

@@ -3,13 +3,27 @@ and the contract-to-brick binding table."""
 
 from __future__ import annotations
 
+from veridian.plugin_runtime.home import ensure_home, home_bricks, home_stacks, veridian_home
 from veridian.plugin_runtime.ipc import Endpoint, StreamCall
-from veridian.plugin_runtime.loader import discover, discover_with_errors, resolve_brick
+from veridian.plugin_runtime.loader import (
+    ResolvedRef,
+    discover,
+    discover_with_errors,
+    installed_versions,
+    resolve_brick,
+    resolve_brick_ref,
+)
 from veridian.plugin_runtime.manifest import (
+    IncompatibleVeridianVersion,
     IsolationSpec,
     Manifest,
     load_manifest,
     parse_manifest,
+)
+from veridian.plugin_runtime.search import (
+    SearchRoot,
+    brick_search_roots,
+    stack_search_roots,
 )
 from veridian.plugin_runtime.process import (
     BrickProcess,
@@ -53,7 +67,18 @@ __all__ = [
     "parse_manifest",
     "discover",
     "discover_with_errors",
+    "installed_versions",
     "resolve_brick",
+    "resolve_brick_ref",
+    "ResolvedRef",
+    "IncompatibleVeridianVersion",
+    "veridian_home",
+    "home_bricks",
+    "home_stacks",
+    "ensure_home",
+    "SearchRoot",
+    "brick_search_roots",
+    "stack_search_roots",
     "PluginRegistry",
     "BrickHandle",
     "cross_check_capabilities",

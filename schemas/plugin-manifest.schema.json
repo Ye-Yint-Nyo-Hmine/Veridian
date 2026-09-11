@@ -55,6 +55,14 @@
         }
       }
     },
+    "requires": {
+      "description": "Compatibility constraints checked when a stack resolves this brick, before it is spawned. `veridian` is a comma-separated version specifier (e.g. \">=0.1,<0.2\") evaluated against the running Veridian version; a mismatch fails stack load naming both versions.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "veridian": { "type": "string" }
+      }
+    },
     "env_passthrough": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }

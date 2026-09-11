@@ -65,7 +65,7 @@ def main() -> None:
                 {"name": "probe", "description": "TCP-connect to host:port", "input_schema": {"type": "object"}}]}})
         elif method == "tools.invoke":
             if params.get("name") == "probe":
-                res = _probe(params.get("arguments") or {})
+                res = _probe(params.get("input") or {})
                 _write({"jsonrpc": "2.0", "id": rid,
                         "result": {"output": json.dumps(res), "is_error": not res["reachable"]}})
             else:

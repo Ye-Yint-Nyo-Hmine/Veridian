@@ -9,6 +9,11 @@ from rich.console import Console
 
 from veridian.cli.ui.theme import THEME
 from veridian.kernel.config import find_repo_root
+from veridian.plugin_runtime.search import (
+    SearchRoot,
+    brick_search_roots,
+    stack_search_roots,
+)
 
 # Best effort: on Windows a piped stdout defaults to the ANSI codepage (cp1252) with strict
 # error handling, so a stray non-ASCII byte in tool output would crash the write. UTF-8 with
@@ -33,6 +38,16 @@ def bricks_root() -> Path:
 
 def stacks_root() -> Path:
     return repo_root() / "stacks"
+
+
+def brick_roots() -> list[SearchRoot]:
+    """The ordered brick search roots: project ``./bricks``, then ``VERIDIAN_HOME/bricks``, then
+    the repo's built-in ``bricks/``. First match wins."""
+    return brick_search_roots(repo_root=repo_root())
+
+
+def stack_roots() -> list[SearchRoot]:
+    return stack_search_roots(repo_root=repo_root())
 
 
 def default_stack() -> Path:

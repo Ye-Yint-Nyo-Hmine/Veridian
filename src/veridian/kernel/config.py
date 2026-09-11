@@ -8,11 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from veridian import __version__
 from veridian.contracts import validate_document
 from veridian.contracts._schemas import SchemaValidationError
 from veridian.kernel.errors import StackConfigError
-from veridian.plugin_runtime.loader import resolve_brick
-from veridian.plugin_runtime.manifest import Manifest
+from veridian.plugin_runtime.loader import resolve_brick_ref
+from veridian.plugin_runtime.manifest import IncompatibleVeridianVersion, Manifest
+from veridian.plugin_runtime.search import brick_search_roots, stack_search_roots
 from veridian.security.policy import Policy
 
 
@@ -22,6 +24,37 @@ def find_repo_root(start: Path | None = None) -> Path:
         if (base / "schemas" / "protocol").is_dir() and (base / "pyproject.toml").is_file():
             return base
     return here
+
+
+def resolve_stack_ref(ref: str | Path, *, repo_root: Path | None = None) -> Path:
+    """Resolve a ``--stack`` value that may be a path *or* a bare name.
+
+    A path (absolute or relative) that exists is used directly. Otherwise ``<ref>.toml`` is looked
+    for under the ordered stack roots (project ``./stacks``, then ``VERIDIAN_HOME/stacks``, then the
+    repo's ``stacks/``); failing that, every ``*.toml`` in those roots is scanned for a matching
+    ``[stack].name``. First match wins."""
+    p = Path(ref)
+    if p.is_file():
+        return p.resolve()
+    repo_root = repo_root or find_repo_root()
+    roots = stack_search_roots(repo_root=repo_root)
+    name = str(ref)
+    for root in roots:
+        cand = root.path / f"{name}.toml"
+        if cand.is_file():
+            return cand.resolve()
+    for root in roots:
+        if not root.path.is_dir():
+            continue
+        for f in sorted(root.path.glob("*.toml")):
+            try:
+                raw = tomllib.loads(f.read_text(encoding="utf-8"))
+            except (OSError, tomllib.TOMLDecodeError):
+                continue
+            if raw.get("stack", {}).get("name") == name:
+                return f.resolve()
+    tried = [str(r.path) for r in roots]
+    raise StackConfigError(f"no stack named {name!r} (looked for {name}.toml under {tried})")
 
 
 @dataclass(frozen=True)
@@ -75,14 +108,21 @@ def load_stack(path: Path, *, repo_root: Path | None = None) -> ResolvedStack:
         raise StackConfigError(f"{path}: {exc}") from exc
 
     raw_bindings = {c: _normalise_binding(v) for c, v in raw["bindings"].items()}
-    search_roots = [repo_root / "bricks"]
+    roots = brick_search_roots(repo_root=repo_root)
+    search_roots = [(r.label, r.path) for r in roots]
 
     resolved: list[ResolvedBinding] = []
     for contract, b in raw_bindings.items():
         ref = b["brick"]
         try:
-            manifest = resolve_brick(ref, search_roots=search_roots, repo_root=repo_root)
+            manifest = resolve_brick_ref(
+                ref, search_roots=search_roots, repo_root=repo_root
+            ).manifest
         except FileNotFoundError as exc:
+            raise StackConfigError(f"{path}: binding {contract!r}: {exc}") from exc
+        try:
+            manifest.check_veridian_compat(__version__)
+        except IncompatibleVeridianVersion as exc:
             raise StackConfigError(f"{path}: binding {contract!r}: {exc}") from exc
         if not manifest.declares(contract) and not b.get("disabled"):
             raise StackConfigError(

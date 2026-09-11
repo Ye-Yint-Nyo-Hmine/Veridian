@@ -73,7 +73,7 @@ async def _kernel(tmp_path: Path, brick_dir: Path) -> Kernel:
 
 
 async def _probe(k: Kernel, host: str, port: int = 443) -> dict:
-    res = await k.call("tools", "invoke", {"name": "probe", "arguments": {"host": host, "port": port}})
+    res = await k.call("tools", "invoke", {"name": "probe", "input": {"host": host, "port": port}})
     return json.loads(res["output"])
 
 

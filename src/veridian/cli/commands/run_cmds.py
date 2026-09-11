@@ -16,7 +16,7 @@ from veridian import __version__
 from veridian.cli._common import console, default_stack, err_console
 from veridian.cli.ui import Renderer
 from veridian.contracts.errors import CONTRACT_NOT_BOUND, ProtocolError
-from veridian.kernel import Kernel, load_stack
+from veridian.kernel import Kernel, load_stack, resolve_stack_ref
 from veridian.kernel.errors import StackConfigError
 from veridian.plugin_runtime.manifest import UnresolvedEnvironment
 
@@ -25,13 +25,13 @@ _EXIT_CODE = {"completed": 0}  # anything else -> 1
 
 def run(
     goal: str = typer.Argument(..., help="What you want the agent to do."),
-    stack: Path = typer.Option(None, "--stack", "-s", help="Stack file (default: stacks/default.toml)."),
+    stack: str = typer.Option(None, "--stack", "-s", help="Stack file path or installed stack name (default: stacks/default.toml)."),
     workspace: Path = typer.Option(Path.cwd(), "--workspace", "-w", help="Workspace root."),
     max_iterations: int = typer.Option(12, help="Cap on orchestrator loop iterations."),
 ) -> None:
     """Run the agent loop for a single goal, through whichever orchestrator the stack binds."""
-    stack_path = stack or default_stack()
     try:
+        stack_path = resolve_stack_ref(stack) if stack else default_stack()
         resolved = load_stack(stack_path)
     except StackConfigError as exc:
         err_console.print(f"[v.err]stack error:[/] {exc}")

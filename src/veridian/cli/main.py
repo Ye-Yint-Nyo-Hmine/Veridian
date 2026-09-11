@@ -49,8 +49,9 @@ def main(
     version: bool = typer.Option(
         None, "--version", callback=_version_cb, is_eager=True, help="Print the version and exit."
     ),
-    stack: Path = typer.Option(
-        None, "--stack", "-s", help="Stack file for the interactive session (default: stacks/default.toml)."
+    stack: str = typer.Option(
+        None, "--stack", "-s",
+        help="Stack file path or installed stack name for the interactive session (default: stacks/default.toml).",
     ),
     workspace: Path = typer.Option(
         None, "--workspace", "-w", help="Workspace root for the interactive session (default: cwd)."

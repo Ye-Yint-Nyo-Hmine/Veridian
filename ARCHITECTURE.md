@@ -42,7 +42,11 @@ this.
 | `process.py` | `BrickProcess` over `asyncio.create_subprocess_exec`. `terminate()` then hard `kill()` after a timeout — no POSIX signals. `stderr` drained line-by-line to a sink, never parsed. Environment scrubbed to an allowlist. A `SpawnStrategy` decides the argv/env/cwd: `ProcessSpawn` (a plain subprocess, the default) or `ContainerSpawn` (wraps the brick command in `docker run` / `podman run`, mounts the workspace and the brick, and turns `isolation.network` into `--network none` or an egress allowlist). |
 | `manifest.py` | Parse + schema-validate `veridian.toml` → frozen `Manifest`. Resolves `${python}` per brick: a brick with a `[dependencies]` table and an installed environment gets its private venv; a brick with no `[dependencies]` gets the kernel's interpreter; a brick that declares dependencies with no matching environment raises `UnresolvedEnvironment` (refused at spawn) rather than silently sharing the kernel's. |
 | `environments.py` | `veridian brick install` — resolve a brick's `[dependencies]` into a private venv (`uv`) or local `node_modules` (`npm`) and record it in `.veridian/environment.json`, fingerprinted against the manifest. |
-| `loader.py` | Discover bricks (`discover` / `discover_with_errors`); resolve a stack reference by path or manifest name. |
+| `home.py` | Resolve `VERIDIAN_HOME` (`~/.veridian`, or the env var) — the user-level location for installed bricks (`bricks/`) and stacks (`stacks/`). Created on demand, never at import. The one helper everything else calls. |
+| `search.py` | The ordered brick/stack search roots: project-local `./bricks`, then `VERIDIAN_HOME/bricks`, then the repo's built-in `bricks/`. First match wins; the order is fixed and printable (`veridian brick which`). |
+| `loader.py` | Discover bricks (`discover` / `discover_with_errors`); resolve a stack reference by path, or by `name` / `name@version` against the ordered roots, reporting which root matched. Understands both a flat brick tree and the versioned `<name>/<version>/` layout `brick add` writes. |
+| `versions.py` | Numeric-release version ordering (pick the highest installed) and the `[requires].veridian` compatibility check, evaluated at stack-resolve time. |
+| `acquire.py` | `veridian brick add` / `stack add`: obtain a brick or stack from a local path, a git URL, or an archive URL, copy it under `VERIDIAN_HOME` (never a symlink), write an `install.json` provenance record beside it, and resolve its dependency environment through `environments.py`. `brick remove` / `stack remove` undo it. |
 | `registry.py` | The contract → brick binding table + `cross_check_capabilities` (a brick whose manifest claims a contract method its running code doesn't report is refused) + `check_environment_resolved` (a brick that declares `[dependencies]` with no matching private environment is refused rather than run against the kernel's packages). |
 
 ## Security (`src/veridian/security/`)
@@ -60,6 +64,11 @@ A brick is a directory with a `veridian.toml` and a spawn command. It is **not**
 module. It implements one or more contracts and may call other bricks only through
 `host.contract.call`. Reference bricks ship for every contract; `bricks/tools/git` is written in
 TypeScript to prove the protocol is language-neutral.
+
+A brick need not live in the source tree. `veridian brick add <source>` installs one from a local
+path, a git URL, or an archive URL into `VERIDIAN_HOME/bricks/<name>/<version>/`, and a stack then
+binds it by name like any built-in. Installing grants no capabilities — those still come only from
+the stack policy and `[isolation]`. See [`docs/plugin-development/`](docs/plugin-development/).
 
 ## The protocol
 

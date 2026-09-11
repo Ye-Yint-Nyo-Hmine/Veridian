@@ -20,7 +20,7 @@ from veridian import __version__
 from veridian.cli._common import console, default_stack, err_console
 from veridian.cli.ui import Renderer
 from veridian.contracts.errors import CONTRACT_NOT_BOUND, ProtocolError
-from veridian.kernel import Kernel, load_stack
+from veridian.kernel import Kernel, load_stack, resolve_stack_ref
 from veridian.kernel.errors import StackConfigError
 from veridian.plugin_runtime.manifest import UnresolvedEnvironment
 
@@ -33,13 +33,13 @@ Anything else is sent to the orchestrator as a goal."""
 
 
 def start_interactive(
-    stack: Path | None = None,
+    stack: str | Path | None = None,
     workspace: Path | None = None,
     max_iterations: int = 12,
 ) -> None:
     """Load a stack, then run the read → run → render loop until EOF or /exit."""
-    stack_path = stack or default_stack()
     try:
+        stack_path = resolve_stack_ref(stack) if stack else default_stack()
         resolved = load_stack(stack_path)
     except StackConfigError as exc:
         err_console.print(f"[v.err]stack error:[/] {exc}")
