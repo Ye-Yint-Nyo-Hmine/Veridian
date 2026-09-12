@@ -258,6 +258,22 @@ exit /b %ERRORLEVEL%
                 $new = if ([string]::IsNullOrWhiteSpace($raw)) { $binDir } else { $raw.TrimEnd(';') + ";" + $binDir }
                 $key.SetValue("Path", $new, $kind)
                 $pathAdded = $true
+
+                # Tell the shell the environment changed. Without this, nothing picks the new PATH
+                # up until you log out. Note it only reaches apps started *after* this point: a
+                # terminal already open keeps the copy it inherited when it launched, which is why
+                # the message below says to restart it rather than to open a new tab.
+                try {
+                    Add-Type -Namespace Veridian -Name Env -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
+'@
+                    $res = [System.UIntPtr]::Zero
+                    # HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG, 5s
+                    [Veridian.Env]::SendMessageTimeout([System.IntPtr]0xffff, 0x1A, [System.IntPtr]::Zero, "Environment", 2, 5000, [ref]$res) | Out-Null
+                } catch {
+                    # Cosmetic only — the registry write above is what actually matters.
+                }
             }
         } finally {
             $key.Close()
@@ -276,7 +292,9 @@ exit /b %ERRORLEVEL%
         Say "Run 'veridian doctor' to check your setup, then 'veridian' in any project directory."
     } elseif ($pathAdded) {
         Say "Added $binDir to your user PATH."
-        Say "Open a new terminal, then run 'veridian doctor'."
+        Say "Quit and reopen your terminal app - a new tab in an already-running window keeps the"
+        Say "old PATH - then run 'veridian doctor'. To use it in this window right now:"
+        Info '$env:Path = [Environment]::GetEnvironmentVariable(''Path'',''Machine'') + '';'' + [Environment]::GetEnvironmentVariable(''Path'',''User'')'
     } else {
         Say "Add this to your PATH, then run 'veridian doctor':"
         Info $binDir
