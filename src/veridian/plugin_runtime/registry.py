@@ -31,6 +31,8 @@ class BrickHandle:
     endpoint: Endpoint
     reported_contracts: dict[str, list[str]] = field(default_factory=dict)
     granted_capabilities: list[str] = field(default_factory=list)
+    #: Seconds a routed ``host.contract.call`` waits on this brick, from its binding.
+    call_timeout: float = 120.0
 
     @property
     def name(self) -> str:

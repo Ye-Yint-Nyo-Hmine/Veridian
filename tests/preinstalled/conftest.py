@@ -12,6 +12,20 @@ PRE = REPO / "pre-installed"
 BRICKS = PRE / "bricks"
 
 
+@pytest.fixture(autouse=True)
+def checkout_root(monkeypatch):
+    """Resolve brick references against this checkout, not against an installed Veridian.
+
+    These tests write their stack into ``tmp_path``, and ``load_stack`` resolves a relative brick
+    reference against the distribution root found by walking up from the stack file. From a temp
+    directory that walk finds no checkout and falls back to ``VERIDIAN_HOME/current`` — so on a
+    machine with a release installed, the suite silently exercised the *installed* copy of these
+    bricks and not the working tree. ``VERIDIAN_ROOT`` is first in the documented resolution
+    order, so setting it pins the suite to the code it is meant to be testing.
+    """
+    monkeypatch.setenv("VERIDIAN_ROOT", str(REPO))
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """An isolated VERIDIAN_HOME so skills / AGENT.md tests never touch the real one."""

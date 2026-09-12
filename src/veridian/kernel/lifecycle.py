@@ -146,6 +146,7 @@ class BrickSupervisor:
             endpoint=endpoint,
             reported_contracts=reported,
             granted_capabilities=list(self.effective_capabilities),
+            call_timeout=self.binding.call_timeout,
         )
         self.bus.emit_type(BRICK_READY, source=self.name, contract=self.contract, pid=proc.pid)
         return handle

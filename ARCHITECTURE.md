@@ -27,7 +27,7 @@ agent shape.
 | `runtime.py` | The `Kernel` object. Starts bricks, binds contracts, routes `host.contract.call`, enforces capabilities at the host-service boundary. Deliberately small. |
 | `lifecycle.py` | `BrickSupervisor` — spawn → `plugin.initialize` → `plugin.capabilities` → cross-check; health via `plugin.ping`; crash detection; restart with exponential backoff and a windowed budget. |
 | `events.py` | Async pub/sub bus with exact and `prefix.*` subscriptions; bounded history. |
-| `config.py` | Loads one stack TOML, schema-validates it, resolves every binding to a real manifest, builds the `Policy`. |
+| `config.py` | Loads one stack TOML, schema-validates it, resolves every binding to a real manifest, builds the `Policy`, and reads each binding's `call_timeout` (the ceiling on a call the kernel routes to that brick). |
 | `errors.py` | Kernel-level exceptions (wire errors live in `contracts/errors.py`). |
 
 The kernel knows contract *names* as opaque strings. It never imports a brick; a test enforces

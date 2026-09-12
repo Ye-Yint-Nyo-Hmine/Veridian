@@ -33,6 +33,24 @@ manifest `env_passthrough` or the kernel scrubs it before the brick starts — `
 lists the four it supports. The CLI reads the same field to warn about a missing key before the
 first goal rather than after, which is why a local binding, declaring none, never warns.
 
+## Call timeouts
+
+The kernel bounds every call it routes through `host.contract.call` and answers `timeout`
+(`-32006`) when a brick overruns. The default is 120 seconds, which suits a hosted model answering
+a coding turn. A slow local model, or a brick that indexes a large workspace, legitimately needs
+longer — that is a property of your deployment, so it is a per-binding key rather than a kernel
+constant:
+
+```toml
+[bindings.inference]
+brick = "bricks/inference/local"
+call_timeout = 600           # seconds; applies to calls routed to this brick
+config = { model = "qwen3.5:4b" }
+```
+
+A brick waits on the kernel's answer without a second deadline of its own, so this value is the
+only ceiling and the error names the brick that was actually slow.
+
 ## The pre-installed agent
 
 `pre-installed/` is the shipped product layer: a complete autonomous coding agent assembled only
@@ -42,8 +60,28 @@ to show what each contract means rather than to be a finished product.
 | Brick | Contract | What it does |
 |---|---|---|
 | `tools/toolkit` | `tools` | Filesystem, terminal via the sandbox contract, git, and user skills — all in one brick, because a stack binds one brick per contract. |
-| `context/repo-map` | `context` | A compact repository map, keyword-ranked selective retrieval, symbol outlines for large files, and `AGENT.md` loading from both the user and workspace locations. |
+| `context/repo-map` | `context` | A compact repository map, keyword-ranked selective retrieval, symbol outlines for large files, and `AGENT.md` loading from both the user and workspace locations. Indexing is budgeted — see below. |
 | `orchestrator/autonomous` | `orchestrator` | Inspect, plan objectives, edit, run, verify each objective against real evidence, recover from failures, compact context. |
+
+### The indexing budget
+
+`context/repo-map` indexes the workspace on the first `context.retrieve` of a session. A workspace
+is whatever directory you started in, which is not always a tidy repository, so that walk is
+bounded and every bound is a hard stop rather than a hint. Tripping one yields a smaller index,
+never a failed call:
+
+| binding config key | default | what it caps |
+|---|---|---|
+| `max_files` | 2000 | files indexed |
+| `max_bytes` | 33554432 | total bytes read |
+| `max_dirs` | 4000 | directories visited |
+| `max_seconds` | 20 | wall clock spent walking |
+| `max_file_bytes` | 1048576 | size of any one file, above which it is skipped |
+
+The walk is breadth-first, so when a bound trips the files that made it in are the shallow ones
+near the workspace root. A truncated index is reported twice: as a warning-level brick log the
+session prints, and as a note appended to the `<repository map>` chunk, so the model is told its
+view is a sample rather than given a partial one it will read as complete.
 
 `pre-installed/stacks/autonomous.toml` binds them. It deliberately names no provider, no model id,
 and no base URL — add an inference binding before running it. See

@@ -28,8 +28,19 @@ class HostProxy:
         return bool(res["granted"])
 
     async def contract_call(
-        self, contract: str, method: str, params: dict[str, Any] | None = None, *, timeout: float = 120.0
+        self, contract: str, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
     ) -> Any:
+        """Route a call to whichever brick the stack binds to ``contract``.
+
+        No brick-side deadline by default. The kernel already bounds this call with the target
+        binding's ``call_timeout`` and always answers — with a result, or with ``timeout``
+        (-32006) naming the brick that overran — and a second ceiling here could only fire first
+        and mask it. That is exactly what used to happen: both sides sat at 120s, so raising the
+        stack's timeout changed nothing and the error blamed the caller rather than the brick that
+        was slow. If the kernel goes away entirely the transport closes and every pending call
+        fails with it, so waiting without a timeout cannot hang. Pass ``timeout`` to impose a
+        shorter deadline of your own.
+        """
         res = await self._ep.call(
             "host.contract.call",
             {"contract": contract, "method": method, "params": params or {}},

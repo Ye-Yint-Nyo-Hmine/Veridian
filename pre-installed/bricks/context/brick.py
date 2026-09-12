@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import deque
 from pathlib import Path
 
 from veridian.plugin_runtime.home import veridian_home
@@ -36,6 +37,22 @@ _CHUNK_LINES = 40
 _SUMMARISE_OVER = 400
 _MAP_MAX_ENTRIES = 400
 _MAP_MAX_DEPTH = 4
+
+# Indexing budget. ``retrieve`` indexes the whole workspace the first time it is called, and the
+# kernel gives that call a finite deadline (``call_timeout`` on the binding, 120s by default), so
+# an unbounded walk does not degrade — it times the whole run out with an error that names nothing
+# useful. A workspace is not always a tidy repository: pointed at a home directory it can be
+# hundreds of thousands of files, and on a sync-backed or network filesystem merely *reading* one
+# can block. Every budget below is therefore a hard stop, not a hint, and tripping one yields a
+# smaller index rather than a failure. ``max_seconds`` is the backstop that holds when the others
+# are mis-set for the filesystem in front of them.
+_MAX_INDEX_FILES = 2_000
+_MAX_INDEX_BYTES = 32 * 1024 * 1024
+_MAX_INDEX_DIRS = 4_000
+_MAX_INDEX_SECONDS = 20.0
+#: A single file larger than this is skipped outright: it is a bundle, a lockfile or a dump, and
+#: chunking it costs more than the recall it adds.
+_MAX_FILE_BYTES = 1024 * 1024
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 _SYMBOL = re.compile(
     r"^\s*(?:export\s+)?(?:async\s+)?(?:def |class |function |func |fn |interface |type |struct |"
@@ -61,22 +78,51 @@ class ContextRepoMap(Brick):
         self.user_agent_path = Path(
             self.config.get("user_agent_md") or (veridian_home() / _AGENT_FILENAME)
         ).expanduser()
+        self.max_files = int(self.config.get("max_files", _MAX_INDEX_FILES))
+        self.max_bytes = int(self.config.get("max_bytes", _MAX_INDEX_BYTES))
+        self.max_dirs = int(self.config.get("max_dirs", _MAX_INDEX_DIRS))
+        self.max_seconds = float(self.config.get("max_seconds", _MAX_INDEX_SECONDS))
+        self.max_file_bytes = int(self.config.get("max_file_bytes", _MAX_FILE_BYTES))
         self._chunks: list[dict] = []
         self._by_path: dict[str, list[int]] = {}
+        #: Which budget stopped the last full index, or ``None`` if it completed. Reported to the
+        #: host as a warning and written into the repository map so the model is told its view of
+        #: the workspace is partial rather than silently given one.
+        self._limit_hit: str | None = None
+        self._indexed_files = 0
         return True
 
     # -- indexing ------------------------------------------------------------
 
     def _iter_files(self, paths: list[str] | None):
+        """Yield the files to index.
+
+        An explicit ``paths`` list is a caller naming its own files and is yielded in full. A full
+        walk is breadth-first and budgeted: breadth-first so that when a budget does trip the files
+        that made it in are the shallow ones near the workspace root, which are the project's own,
+        rather than whatever a depth-first descent happened to reach first.
+        """
         if paths:
             for rel in paths:
                 p = (self.root / rel).resolve()
                 if p.is_file():
                     yield p
             return
-        stack = [self.root]
-        while stack:
-            cur = stack.pop()
+
+        self._limit_hit = None
+        deadline = time.perf_counter() + self.max_seconds
+        queue: deque[Path] = deque([self.root])
+        dirs = files = total_bytes = 0
+
+        while queue:
+            if dirs >= self.max_dirs:
+                self._limit_hit = f"{self.max_dirs} directories"
+                return
+            if time.perf_counter() > deadline:
+                self._limit_hit = f"{self.max_seconds:g}s"
+                return
+            cur = queue.popleft()
+            dirs += 1
             try:
                 entries = sorted(cur.iterdir())
             except OSError:
@@ -84,10 +130,26 @@ class ContextRepoMap(Brick):
             for entry in entries:
                 if entry.name in _IGNORE:
                     continue
-                if entry.is_dir():
-                    stack.append(entry)
-                elif entry.suffix.lower() in _TEXT_EXT:
-                    yield entry
+                try:
+                    if entry.is_dir():
+                        queue.append(entry)
+                        continue
+                    if entry.suffix.lower() not in _TEXT_EXT:
+                        continue
+                    size = entry.stat().st_size
+                except OSError:
+                    continue
+                if size > self.max_file_bytes:
+                    continue
+                if files >= self.max_files:
+                    self._limit_hit = f"{self.max_files} files"
+                    return
+                if total_bytes + size > self.max_bytes:
+                    self._limit_hit = f"{self.max_bytes // (1024 * 1024)}MB"
+                    return
+                files += 1
+                total_bytes += size
+                yield entry
 
     def _symbol_outline(self, lines: list[str]) -> str:
         outline = [
@@ -104,6 +166,8 @@ class ContextRepoMap(Brick):
 
     def _index_file(self, path: Path) -> int:
         try:
+            if path.stat().st_size > self.max_file_bytes:
+                return 0
             lines = path.read_text(encoding="utf-8").splitlines()
         except (UnicodeDecodeError, OSError):
             return 0
@@ -162,18 +226,26 @@ class ContextRepoMap(Brick):
             except OSError:
                 return
             for entry in entries:
-                if entry.name in _IGNORE or count >= _MAP_MAX_ENTRIES:
+                if count >= _MAP_MAX_ENTRIES:
+                    return          # the map is full; nothing below can still be added
+                if entry.name in _IGNORE:
                     continue
                 count += 1
                 if entry.is_dir():
                     rows.append(f"{prefix}{entry.name}/")
                     walk(entry, prefix + "  ", depth + 1)
                 elif entry.suffix.lower() in _TEXT_EXT:
+                    # Counting lines reads the whole file. Worth it for source, not for a bundle
+                    # or a lockfile, which is also the one place a single entry can stall the map.
                     try:
-                        n = sum(1 for _ in entry.open("rb"))
+                        n = 0 if entry.stat().st_size > self.max_file_bytes else sum(
+                            1 for _ in entry.open("rb")
+                        )
                     except OSError:
                         n = 0
-                    rows.append(f"{prefix}{entry.name}  ({n} lines)")
+                    rows.append(
+                        f"{prefix}{entry.name}" + (f"  ({n} lines)" if n else "")
+                    )
                 else:
                     rows.append(f"{prefix}{entry.name}")
 
@@ -228,8 +300,25 @@ class ContextRepoMap(Brick):
     @rpc("context.index")
     async def index(self, params, ctx):
         t0 = time.perf_counter()
-        n = sum(self._index_file(p) for p in self._iter_files(params.get("paths")))
-        return {"indexed": n, "took_ms": (time.perf_counter() - t0) * 1000}
+        n = 0
+        files = 0
+        for path in self._iter_files(params.get("paths")):
+            files += 1
+            n += self._index_file(path)
+        self._indexed_files = files
+        took_ms = (time.perf_counter() - t0) * 1000
+        if self._limit_hit:
+            # A warning, not an error: a partial index still answers most queries. The host
+            # renders warning-level brick logs, so the user is told why recall is thin instead of
+            # being left to infer it from poor answers.
+            await self.host.log(
+                f"indexed {files} file(s) of {self.root} and stopped at the "
+                f"{self._limit_hit} budget — retrieval covers part of this workspace. "
+                f"Point the agent at a project directory, or raise the context brick's "
+                f"max_files / max_bytes / max_seconds config to widen it.",
+                level="warning",
+            )
+        return {"indexed": n, "took_ms": took_ms}
 
     @rpc("context.retrieve")
     async def retrieve(self, params, ctx):
@@ -249,11 +338,19 @@ class ContextRepoMap(Brick):
         scored.sort(key=lambda s: s[0], reverse=True)
 
         chunks: list[dict] = list(self._agent_chunks())
+        map_text = self._repo_map()
+        if self._limit_hit:
+            map_text += (
+                f"\n\n[partial index: {self._indexed_files} file(s) indexed, stopped at the "
+                f"{self._limit_hit} budget. This workspace is larger than the agent indexes by "
+                f"default, so treat the map and the retrieved chunks as a sample of it, not a "
+                f"complete listing. Search for files by name rather than assuming absence.]"
+            )
         chunks.append(
             {
                 "path": "<repository map>",
                 "span": [1, 1],
-                "text": self._repo_map(),
+                "text": map_text,
                 "score": 0.97,
             }
         )

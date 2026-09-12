@@ -44,6 +44,12 @@ veridian
 **The directory you start it in becomes the workspace** — where context is retrieved from, where
 tools read and write, and where bricks are confined. Use `--workspace` to point somewhere else.
 
+Start it in a project, not in your home directory. A workspace is indexed on the first retrieval
+of every session, and the context brick stops at a budget rather than walking a whole machine, so
+a home directory gets you an agent that silently sees a fraction of your files. Veridian warns at
+startup when the workspace resolves to your home directory or a filesystem root; the budget and
+the warning are both described under [`../bricks/`](../bricks/).
+
 The first run asks which model provider to use and which agent to run:
 
 | Provider | Brick | Key |

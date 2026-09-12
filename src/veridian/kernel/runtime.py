@@ -299,7 +299,9 @@ class Kernel:
 
         self._maybe_validate_params(contract, method, inner)
         try:
-            result = await target.endpoint.call(f"{contract}.{method}", inner, timeout=120.0)
+            result = await target.endpoint.call(
+                f"{contract}.{method}", inner, timeout=target.call_timeout
+            )
         except ProtocolError as exc:
             self.events.emit_type(
                 CONTRACT_CALL_FAILED, source=caller, contract=contract, method=method, code=exc.code

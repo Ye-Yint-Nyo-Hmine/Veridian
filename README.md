@@ -74,7 +74,9 @@ veridian
 ```
 
 **The directory you run it from is the workspace.** That is where context is retrieved, where tools
-read and write, and where bricks are confined. There is nothing to configure per project.
+read and write, and where bricks are confined. There is nothing to configure per project. Run it
+in a project directory rather than in your home directory: context indexing is budgeted, so a
+workspace that large is indexed only in part, and Veridian says so at startup.
 
 The installer fetches a signed-by-checksum release tarball, gives Veridian its own Python 3.13
 environment (installing [uv](https://docs.astral.sh/uv/) first if you don't have it), and puts a

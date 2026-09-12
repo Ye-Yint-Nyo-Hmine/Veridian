@@ -42,6 +42,7 @@ from veridian.cli.repl_commands import (
     render_help,
 )
 from veridian.cli.ui import Renderer, current_branch, select
+from veridian.cli.workspace import workspace_warning
 from veridian.contracts.errors import CONTRACT_NOT_BOUND, ProtocolError
 from veridian.kernel import Kernel, load_stack, resolve_stack_ref
 from veridian.kernel.errors import StackConfigError
@@ -100,6 +101,15 @@ def start_interactive(
         )
 
     ws = (workspace or Path.cwd()).resolve()
+    # Advisory, not fatal: the workspace is just the directory you started in, so this is the one
+    # place a user finds out they pointed the agent at their whole machine before a goal does it
+    # for them.
+    if (why := workspace_warning(ws)) is not None:
+        err_console.print(
+            f"[v.warn]{why}[/] — every workspace-scoped brick will read from it and context "
+            f"indexing will cover only part of it. Start Veridian in a project directory, or "
+            f"pass [v.meta]--workspace[/]."
+        )
     session_id = resumed.id if resumed else new_session_id()
     start_mode = resumed.mode if (resumed and resumed.mode in MODES) else DEFAULT_MODE
 

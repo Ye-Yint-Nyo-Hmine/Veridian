@@ -37,6 +37,7 @@
             "properties": {
               "brick": { "type": "string" },
               "disabled": { "type": "boolean" },
+              "call_timeout": { "type": "number", "exclusiveMinimum": 0 },
               "config": { "type": "object" },
               "grant": { "type": "array", "items": { "type": "string" } },
               "deny": { "type": "array", "items": { "type": "string" } },

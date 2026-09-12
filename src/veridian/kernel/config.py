@@ -59,6 +59,14 @@ def resolve_stack_ref(ref: str | Path, *, repo_root: Path | None = None) -> Path
     raise StackConfigError(f"no stack named {name!r} (looked for {name}.toml under {tried})")
 
 
+#: Seconds the kernel waits for a brick to answer a call routed through ``host.contract.call``
+#: before returning ``timeout`` (-32006). A per-binding ``call_timeout`` overrides it. The default
+#: suits a hosted model answering a coding turn; a slow local model, or a brick that indexes a
+#: large workspace, legitimately needs longer, and that is a property of the deployment rather
+#: than of the kernel.
+DEFAULT_CALL_TIMEOUT = 120.0
+
+
 @dataclass(frozen=True)
 class ResolvedBinding:
     contract: str
@@ -66,6 +74,7 @@ class ResolvedBinding:
     config: dict[str, Any] = field(default_factory=dict)
     env: dict[str, str] = field(default_factory=dict)
     disabled: bool = False
+    call_timeout: float = DEFAULT_CALL_TIMEOUT
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,7 @@ def load_stack(path: Path, *, repo_root: Path | None = None) -> ResolvedStack:
                 config=dict(b.get("config", {})),
                 env=dict(b.get("env", {})),
                 disabled=bool(b.get("disabled", False)),
+                call_timeout=float(b.get("call_timeout", DEFAULT_CALL_TIMEOUT)),
             )
         )
 

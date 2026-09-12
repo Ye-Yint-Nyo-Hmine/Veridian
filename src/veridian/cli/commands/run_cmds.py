@@ -23,6 +23,7 @@ from veridian.cli._common import (
     model_name,
 )
 from veridian.cli.ui import Renderer
+from veridian.cli.workspace import workspace_warning
 from veridian.contracts.errors import CONTRACT_NOT_BOUND, ProtocolError
 from veridian.kernel import Kernel, load_stack, resolve_stack_ref
 from veridian.kernel.errors import StackConfigError
@@ -58,9 +59,16 @@ def run(
         )
         raise typer.Exit(1)
 
+    ws = (workspace or Path.cwd()).resolve()
+    if (why := workspace_warning(ws)) is not None:
+        err_console.print(
+            f"[v.warn]{why}[/] — context indexing will cover only part of it. "
+            f"Pass [v.meta]--workspace[/] with a project directory."
+        )
+
     renderer = Renderer(console, err_console)
     try:
-        code = asyncio.run(_run(resolved, goal, (workspace or Path.cwd()).resolve(), max_iterations, renderer))
+        code = asyncio.run(_run(resolved, goal, ws, max_iterations, renderer))
     except KeyboardInterrupt:
         renderer.run_interrupted()
         raise typer.Exit(130)
