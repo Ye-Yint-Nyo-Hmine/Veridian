@@ -25,7 +25,7 @@ Thanks for helping build a runtime that stays out of your way.
 
 ```bash
 uv sync --extra dev
-uv run pytest -m "not live"           # hermetic suite, must pass with no provider configured
+uv run pytest                         # hermetic suite, must pass with no provider configured
 uv run pytest -m live                 # live suite, needs a key or a reachable local server
 uv run pytest -m install              # dependency-isolation suite, needs network and uv
 uv run pytest -m container            # isolation suite, needs a container engine on PATH

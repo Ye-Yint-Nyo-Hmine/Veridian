@@ -19,8 +19,10 @@ jobs:
         with:
           python-version: "3.13"
       - run: uv sync --extra dev
+      # Plain `pytest`: an explicit -m REPLACES addopts' marker expression, which would pull the
+      # install/container/installer suites into this job. They each have their own below.
       - name: Hermetic test suite (no provider configured)
-        run: uv run pytest -m "not live"
+        run: uv run pytest
         env:
           ANTHROPIC_API_KEY: ""
           OPENAI_API_KEY: ""

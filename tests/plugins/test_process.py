@@ -85,8 +85,9 @@ async def test_brick_is_spawned_detached_from_the_consoles_ctrl_c(tmp_path, monk
 async def test_posix_brick_runs_in_its_own_session_so_the_parents_sigint_misses_it(tmp_path):
     """`start_new_session` puts the brick in its own session/group. A SIGINT delivered to the
     kernel's foreground group (a console Ctrl-C) therefore never reaches the brick; the kernel
-    alone decides when it stops, and `stop()` ends it cleanly (rc 0)."""
+    alone decides when it stops, and `stop()` is what ends it."""
     import os
+    import signal
 
     p = _proc("ok", tmp_path)
     ep = await p.start()
@@ -100,7 +101,11 @@ async def test_posix_brick_runs_in_its_own_session_so_the_parents_sigint_misses_
         assert (await ep.call("echo.say", {"text": "still here"}, timeout=5.0)) == {"text": "still here"}
     finally:
         rc = await p.stop()
-    assert rc == 0
+    # stop() terminates the process rather than asking it to exit — the graceful `plugin.shutdown`
+    # handshake belongs to BrickSupervisor. On POSIX that SIGTERM is reported as -15; what matters
+    # here is that the brick is gone and was not left behind by the hard-kill path.
+    assert rc in (0, -signal.SIGTERM)
+    assert not p.alive
 
 
 async def test_echo_ok_streaming(tmp_path):

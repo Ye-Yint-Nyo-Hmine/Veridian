@@ -31,10 +31,14 @@ jobs:
       - name: Build sdist and wheel
         run: uv build
 
+      # Plain `pytest`, not `-m "not live"`: an explicit -m REPLACES the marker expression in
+      # pyproject's addopts, which would drag the live/install/container/installer suites into a
+      # job that has neither the provider extras nor a reason to run them. The end-to-end install
+      # is checked by its own step below.
       - name: Hermetic suite must pass before release
         run: |
           uv sync --extra dev
-          uv run pytest -m "not live"
+          uv run pytest
 
       # The installer unpacks this as a working tree, not as a package: the runtime locates
       # bricks/, stacks/, schemas/, pre-installed/ and sdks/ as siblings under one root, so a
