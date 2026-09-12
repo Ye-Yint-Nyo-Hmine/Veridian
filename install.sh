@@ -130,7 +130,13 @@ else
     fetch "$base/$name" "$TMP/veridian.tar.gz" || die "could not download $base/$name"
     fetch "$base/SHA256SUMS" "$TMP/SHA256SUMS" || die "could not download $base/SHA256SUMS"
 
-    expected=$(grep " \*\{0,1\}$name\$" "$TMP/SHA256SUMS" | awk '{print $1}' | head -n1)
+    # Match the filename as a whole field rather than with a regex anchored at end of line: a
+    # SHA256SUMS generated on Windows carries a trailing CR, which sits between the name and the
+    # line end and defeats a `$` anchor everywhere except MSYS (which strips CR on read). The
+    # leading `*` is the binary-mode marker some sha256sum implementations write.
+    expected=$(awk -v want="$name" '
+        { sub(/\r$/, ""); f = $2; sub(/^\*/, "", f); if (f == want) { print $1; exit } }
+    ' "$TMP/SHA256SUMS")
     [ -n "$expected" ] || die "SHA256SUMS has no entry for $name"
     actual=$(sha256_of "$TMP/veridian.tar.gz")
     [ "$expected" = "$actual" ] || die "checksum mismatch for $name (expected $expected, got $actual)"
