@@ -5,13 +5,16 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from pathlib import Path
 
 import typer
 from rich.table import Table
 
+from veridian._paths import install_mode
 from veridian.cli._common import bricks_root, console, default_stack, repo_root
 from veridian.contracts._schemas import check_all_schemas_valid
 from veridian.kernel.config import load_stack
+from veridian.plugin_runtime.home import veridian_home
 from veridian.plugin_runtime.loader import discover_with_errors
 
 
@@ -42,11 +45,11 @@ def doctor() -> None:
     if ds.is_file():
         try:
             s = load_stack(ds)
-            row("stacks/default.toml", True, f"{len(s.active())} bindings")
+            row("default stack", True, f"{s.name} — {len(s.active())} bindings ({ds})")
         except Exception as exc:  # noqa: BLE001
-            row("stacks/default.toml", False, str(exc))
+            row("default stack", False, f"{ds}: {exc}")
     else:
-        row("stacks/default.toml", False, "missing", hard=False)
+        row("default stack", False, f"missing ({ds})", hard=False)
 
     row("node (for TypeScript bricks)", shutil.which("node") is not None,
         shutil.which("node") or "not found", hard=False)
@@ -57,7 +60,23 @@ def doctor() -> None:
     row("an inference provider", bool(providers),
         ", ".join(providers) or "none set (kernel still runs; `veridian run` needs one)", hard=False)
 
+    row("uv (brick environments)", shutil.which("uv") is not None,
+        shutil.which("uv") or "not found", hard=False)
+
+    # A launcher that is not the one this install wrote means an older copy is winning on PATH —
+    # the failure that otherwise looks like "my upgrade did nothing".
+    mode = install_mode()
+    if mode == "installed":
+        launcher = shutil.which("veridian")
+        expected = veridian_home() / "bin"
+        stale = launcher is not None and expected not in Path(launcher).parents
+        row("veridian on PATH", launcher is not None and not stale,
+            launcher or f"not found (add {expected} to PATH)", hard=False)
+
     console.print(table)
-    console.print(f"repo root: {repo_root()}")
+    console.print(f"install: {mode}")
+    console.print(f"root:    {repo_root()}")
+    console.print(f"home:    {veridian_home()}")
+    console.print(f"python:  {sys.executable}")
     if hard_fail:
         raise typer.Exit(1)

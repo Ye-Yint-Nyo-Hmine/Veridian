@@ -28,20 +28,32 @@ app.add_typer(brick_cmds.app, name="brick")
 app.add_typer(protocol_cmds.app, name="protocol")
 
 
+def _version_lines() -> list[str]:
+    from veridian import __version__
+    from veridian._paths import install_mode, veridian_root
+
+    lines = [f"veridian {__version__}"]
+    try:
+        root = veridian_root()
+    except RuntimeError as exc:  # a bad VERIDIAN_ROOT should be visible, not hidden
+        lines.append(str(exc))
+        return lines
+    lines.append(f"root {root}  ({install_mode()})" if root else "root not found")
+    return lines
+
+
 def _version_cb(value: bool) -> None:
     if value:
-        from veridian import __version__
-
-        typer.echo(__version__)
+        for line in _version_lines():
+            typer.echo(line)
         raise typer.Exit()
 
 
 @app.command()
 def version() -> None:
-    """Print the Veridian version."""
-    from veridian import __version__
-
-    typer.echo(__version__)
+    """Print the Veridian version and where this install lives."""
+    for line in _version_lines():
+        typer.echo(line)
 
 
 @app.callback(invoke_without_command=True)
@@ -52,7 +64,7 @@ def main(
     ),
     stack: str = typer.Option(
         None, "--stack", "-s",
-        help="Stack file path or installed stack name for the interactive session (default: stacks/default.toml).",
+        help="Stack file path or installed stack name (default: your configured stack, else the built-in one).",
     ),
     workspace: Path = typer.Option(
         None, "--workspace", "-w", help="Workspace root for the interactive session (default: cwd)."
@@ -77,6 +89,12 @@ def run(argv: list[str] | None = None) -> None:
     """Console-script entry point. Rewrites a bare ``--resume`` (no id) to ``--resume=`` so the
     option can mean both "resume this id" and "let me pick one" — Typer options otherwise always
     require a value."""
+    # Provider keys the user asked us to remember live here; bricks read them from the environment
+    # through their manifest allowlist, so they have to be in place before any kernel starts.
+    from veridian.cli.userconfig import load_env_file
+
+    load_env_file()
+
     args = list(sys.argv[1:] if argv is None else argv)
     fixed: list[str] = []
     for i, tok in enumerate(args):

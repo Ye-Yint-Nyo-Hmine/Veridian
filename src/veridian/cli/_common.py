@@ -53,7 +53,38 @@ def stack_roots() -> list[SearchRoot]:
 
 
 def default_stack() -> Path:
+    """The stack a bare ``veridian`` uses: whatever the first run recorded, else the built-in one.
+
+    The recorded name is resolved through the ordinary stack search roots, so a stack the first run
+    wrote to ``VERIDIAN_HOME/stacks`` is found the same way any installed stack is.
+    """
+    from veridian.cli.userconfig import read_config
+    from veridian.kernel.config import resolve_stack_ref
+
+    chosen = read_config().get("default_stack")
+    if chosen:
+        try:
+            return resolve_stack_ref(chosen)
+        except Exception:  # noqa: BLE001 — a stale choice must not block the built-in fallback
+            pass
     return stacks_root() / "default.toml"
+
+
+def missing_provider_env(resolved) -> list[str]:
+    """The credential variable an inference binding declares but does not have.
+
+    Deliberately declarative rather than guessed: a binding states which variable carries its key
+    with ``api_key_env``, the provider brick reads that same variable, and this reads it to warn
+    before the first goal instead of after. A binding that declares nothing needs nothing — which
+    is what a local model server is, and why guessing from the manifest would be wrong there.
+    """
+    binding = resolved.binding_for("inference")
+    if binding is None:
+        return []
+    var = binding.config.get("api_key_env")
+    if not var or binding.config.get("api_key") or os.environ.get(var):
+        return []
+    return [str(var)]
 
 
 def describe_run_failure(exc) -> str:

@@ -3,7 +3,16 @@ version = "0.1.0"
 description = "OpenAI-compatible chat completions and embeddings. Implements both inference and model_provider."
 protocol = "veridian/1.0"
 runtime = "python"
-env_passthrough = ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+# Every provider this adapter can front. They are all the OpenAI chat-completions API behind a
+# different base URL, so one brick serves them all — but each has its own conventional variable,
+# and a stack selects exactly one with `api_key_env`.
+env_passthrough = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "GEMINI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "MOONSHOT_API_KEY",
+]
 
 [spawn]
 command = ["${python}", "brick.py"]

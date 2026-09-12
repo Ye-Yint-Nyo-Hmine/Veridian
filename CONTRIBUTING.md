@@ -29,6 +29,7 @@ uv run pytest -m "not live"           # hermetic suite, must pass with no provid
 uv run pytest -m live                 # live suite, needs a key or a reachable local server
 uv run pytest -m install              # dependency-isolation suite, needs network and uv
 uv run pytest -m container            # isolation suite, needs a container engine on PATH
+uv run pytest -m installer            # installs a release tarball end to end, builds a real venv
 uv run python scripts/milestone1.py   # the eight Milestone 1 criteria
 uv run python scripts/milestone2.py   # the ten Milestone 2 criteria
 ```

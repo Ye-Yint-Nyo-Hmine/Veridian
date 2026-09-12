@@ -2,3 +2,13 @@
 *.png binary
 *.jpg binary
 *.ico binary
+
+# The release tarball is built with `git archive`, and it is what the installer unpacks as a
+# working Veridian tree. Everything below is development-only: excluding it keeps the download
+# small without touching anything the runtime resolves at run time (bricks/, stacks/, schemas/,
+# pre-installed/ and sdks/ must all ship, since they are located as siblings under one root).
+/tests export-ignore
+/.github export-ignore
+/examples export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore

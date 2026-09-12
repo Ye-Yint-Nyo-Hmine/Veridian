@@ -193,13 +193,16 @@ def _pick_and_switch_stack(ctx: "ReplContext") -> None:
     _switch_stack(ctx, str(chosen.path))
 
 
-def _switch_stack(ctx: "ReplContext", ref: str) -> None:
+def _switch_stack(ctx: "ReplContext", ref: str, *, force: bool = False) -> None:
     """Tear down the running stack and bring up ``ref`` in its place, keeping the session id,
     conversation, mode, and workspace.
 
     The target is fully resolved and validated *before* anything is stopped, and the new kernel is
     started *before* the old one is torn down — so a target that will not load or will not start
     leaves the current session exactly as it was.
+
+    ``force`` reloads even when the path is unchanged, which is what ``/setup`` needs: the file it
+    just rewrote is usually the one already bound.
     """
     r = ctx.renderer
 
@@ -213,7 +216,7 @@ def _switch_stack(ctx: "ReplContext", ref: str) -> None:
         r.error(f"stack {ref!r} did not load — staying on {ctx.resolved.name}: {exc}")
         return
 
-    if target.path == getattr(ctx.resolved, "path", None):
+    if not force and target.path == getattr(ctx.resolved, "path", None):
         r.info(f"already on {target.name}")
         return
     if target.binding_for("orchestrator") is None:
@@ -286,6 +289,23 @@ def _switch_stack(ctx: "ReplContext", ref: str) -> None:
             ctx.state.counts_shown = True
         except ProtocolError:
             pass  # no tools brick bound — the next goal will settle the count
+
+
+def cmd_setup(ctx: "ReplContext", _args: str) -> None:
+    """Run the first-run questions again and switch to the stack they produce.
+
+    The same flow as a fresh install — provider, key, agent — so changing provider is two answers
+    rather than an edit to a TOML file. Cancelling at any prompt leaves the session untouched.
+    """
+    from veridian.cli._common import stacks_root
+    from veridian.cli.onboarding import run_onboarding
+
+    r = ctx.renderer
+    target = run_onboarding(console, r.err, builtin_stacks=stacks_root(), returning=True)
+    if target is None:
+        r.info("setup cancelled — nothing changed")
+        return
+    _switch_stack(ctx, str(target), force=True)
 
 
 def cmd_workspace(ctx: "ReplContext", _args: str) -> None:
@@ -441,6 +461,7 @@ REGISTRY: list[Command] = [
         cmd_stack,
         usage="[list|name]",
     ),
+    Command("/setup", "choose a model provider and agent again", cmd_setup),
     Command("/workspace", "the workspace root", cmd_workspace),
     Command("/mode", "cycle the session mode (plan <-> auto)", cmd_mode),
     Command("/exit", "leave (Ctrl-D also works)", cmd_exit, aliases=("/quit",)),

@@ -57,6 +57,27 @@ jobs:
           ANTHROPIC_API_KEY: ""
           OPENAI_API_KEY: ""
 
+  installer:
+    # install.sh / install.ps1 end to end: build a tarball, install it, and run the result from an
+    # unrelated directory. Both hosts, because the two scripts share no code and the failures are
+    # platform-specific (path rewriting on Windows, profile edits on Unix).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --extra dev
+      - name: Installer suite
+        run: uv run pytest -m installer
+        env:
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
+
   live:
     # Manually triggered only. Uses repository secrets.
     if: github.event_name == 'workflow_dispatch'

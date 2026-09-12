@@ -27,9 +27,12 @@ from veridian.cli._common import (
     default_stack,
     describe_run_failure,
     err_console,
+    missing_provider_env,
     model_name,
+    stacks_root,
 )
 from veridian.cli.mode import DEFAULT_MODE, MODES, withheld_capabilities
+from veridian.cli.onboarding import run_onboarding, should_run
 from veridian.cli.repl_commands import (
     ReplContext,
     _override_binding_config,
@@ -75,6 +78,9 @@ def start_interactive(
                 )
                 raise typer.Exit(1)
 
+    if resumed is None and should_run(stack if isinstance(stack, str) else None):
+        run_onboarding(console, err_console, builtin_stacks=stacks_root())
+
     try:
         stack_path = resolve_stack_ref(stack) if stack else default_stack()
         resolved = load_stack(stack_path)
@@ -84,6 +90,14 @@ def start_interactive(
     if resolved.binding_for("orchestrator") is None:
         err_console.print(f"[v.err]stack {resolved.name!r} binds no orchestrator[/]")
         raise typer.Exit(1)
+
+    # Say this before the session starts rather than letting the first goal die inside the brick.
+    # Not fatal: /stack and /model can fix it from the prompt, and the kernel runs regardless.
+    for var in missing_provider_env(resolved):
+        err_console.print(
+            f"[v.warn]{var} is not set[/] — goals will fail until it is. "
+            f"Set it, or use [v.meta]/stack[/] to pick a local model."
+        )
 
     ws = (workspace or Path.cwd()).resolve()
     session_id = resumed.id if resumed else new_session_id()

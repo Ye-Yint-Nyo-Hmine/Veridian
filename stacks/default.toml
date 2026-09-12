@@ -23,7 +23,7 @@ grant = [
 ]
 
 [bindings]
-inference = { brick = "bricks/inference/anthropic", config = { model = "claude-opus-5", max_tokens = 2048 } }
+inference = { brick = "bricks/inference/anthropic", config = { model = "claude-opus-5", max_tokens = 2048, api_key_env = "ANTHROPIC_API_KEY" } }
 context = "bricks/context/default"
 planner = "bricks/planning/default"
 memory = "bricks/memory/ephemeral"

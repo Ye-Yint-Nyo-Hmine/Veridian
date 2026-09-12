@@ -17,6 +17,8 @@ import jsonschema
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+from veridian._paths import veridian_root
+
 SCHEMA_BASE_URI = "https://veridian.dev/schemas/"
 
 #: The protocol version this build speaks. ``veridian/1.1`` adds optional cancellation
@@ -61,9 +63,10 @@ class SchemaValidationError(ValueError):
 def find_schema_dir() -> Path:
     """Locate the canonical ``schemas/`` directory.
 
-    Order: ``$VERIDIAN_SCHEMA_DIR``; then walk up from the current working directory; then walk up
-    from this file. First directory containing ``protocol/envelope.schema.json`` wins. Bundling the
-    schemas into the wheel is a packaging task tracked in ROADMAP.md.
+    Order: ``$VERIDIAN_SCHEMA_DIR``; then the current working directory and this file's ancestors
+    (a checkout, or an editable install); then the distribution tree :mod:`veridian._paths`
+    resolves, which is what makes a globally installed ``veridian`` work from any directory. First
+    directory containing ``protocol/envelope.schema.json`` wins.
     """
     env = os.environ.get("VERIDIAN_SCHEMA_DIR")
     if env:
@@ -76,7 +79,14 @@ def find_schema_dir() -> Path:
         cand = base / "schemas"
         if (cand / "protocol" / "envelope.schema.json").is_file():
             return cand
-    raise RuntimeError("could not locate the Veridian schemas/ directory; set VERIDIAN_SCHEMA_DIR")
+    root = veridian_root()
+    if root is not None:
+        cand = root / "schemas"
+        if (cand / "protocol" / "envelope.schema.json").is_file():
+            return cand
+    raise RuntimeError(
+        "could not locate the Veridian schemas/ directory; set VERIDIAN_SCHEMA_DIR or VERIDIAN_ROOT"
+    )
 
 
 @cache

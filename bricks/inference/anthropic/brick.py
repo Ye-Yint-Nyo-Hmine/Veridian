@@ -34,7 +34,9 @@ class AnthropicInference(Brick):
         self.max_tokens = int(self.config.get("max_tokens", 4096))
         self.thinking = self.config.get("thinking")  # None | "adaptive"
         self.effort = self.config.get("effort")  # None | low..max
-        self.api_key = os.environ.get("ANTHROPIC_API_KEY") or self.config.get("api_key")
+        # Which environment variable carries the key; a stack may name a different one.
+        self.key_env = self.config.get("api_key_env") or "ANTHROPIC_API_KEY"
+        self.api_key = os.environ.get(self.key_env) or self.config.get("api_key")
         self.base_url = os.environ.get("ANTHROPIC_BASE_URL") or self.config.get("base_url")
         self._client = None
         return True
@@ -47,7 +49,7 @@ class AnthropicInference(Brick):
         except ImportError as exc:  # pragma: no cover
             raise BrickError("anthropic SDK not installed (uv sync --extra providers)", code=-32004) from exc
         if not self.api_key and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-            raise BrickError("no ANTHROPIC_API_KEY configured", code=-32004)
+            raise BrickError(f"no {self.key_env} configured", code=-32004)
         kwargs = {}
         if self.api_key:
             kwargs["api_key"] = self.api_key

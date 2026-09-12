@@ -5,6 +5,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,14 +16,63 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
+
+      - name: Tag must match the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/veridian/__init__.py)
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME does not match __version__ $pkg" >&2
+            exit 1
+          fi
+          echo "VERSION=$pkg" >> "$GITHUB_ENV"
+
       - name: Build sdist and wheel
         run: uv build
+
       - name: Hermetic suite must pass before release
         run: |
           uv sync --extra dev
           uv run pytest -m "not live"
+
+      # The installer unpacks this as a working tree, not as a package: the runtime locates
+      # bricks/, stacks/, schemas/, pre-installed/ and sdks/ as siblings under one root, so a
+      # wheel alone cannot run. `git archive` honours the export-ignore rules in .gitattributes.
+      - name: Build the release tarball
+        run: |
+          version="${VERSION:-$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/veridian/__init__.py)}"
+          mkdir -p dist
+          git archive --format=tar.gz \
+            --prefix="veridian-${version}/" \
+            -o "dist/veridian-${version}.tar.gz" \
+            "${GITHUB_SHA}"
+          (cd dist && sha256sum ./*.tar.gz > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Verify the tarball installs and runs from an unrelated directory
+        run: |
+          version="${VERSION:-$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/veridian/__init__.py)}"
+          export VERIDIAN_HOME="$RUNNER_TEMP/veridian-home"
+          sh install.sh --tarball "dist/veridian-${version}.tar.gz" --no-modify-path
+          mkdir -p "$RUNNER_TEMP/scratch" && cd "$RUNNER_TEMP/scratch"
+          "$VERIDIAN_HOME/bin/veridian" --version
+          "$VERIDIAN_HOME/bin/veridian" doctor
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/*
-      # Publishing to an index is a roadmap item; artifacts are attached to the run for now.
+
+      - name: Publish the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/veridian-*.tar.gz
+            dist/SHA256SUMS
+            install.sh
+            install.ps1
+          generate_release_notes: true
+      # Publishing to a package index is still a roadmap item; the tarball above is what
+      # install.sh and install.ps1 consume.

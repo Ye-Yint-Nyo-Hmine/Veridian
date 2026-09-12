@@ -32,7 +32,12 @@ class OpenAIInference(Brick):
         self.model = self.config.get("model", _DEFAULT_MODEL)
         self.embed_model = self.config.get("embed_model", _DEFAULT_EMBED)
         self.base_url = self.config.get("base_url") or os.environ.get("OPENAI_BASE_URL")
-        self.api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("api_key")
+        # Which environment variable carries the key. Every OpenAI-compatible provider — Gemini,
+        # DeepSeek, Moonshot — is this same adapter behind a different base URL, and each has its
+        # own conventional variable name. A stack that points here names the one it means; nothing
+        # falls back to OPENAI_API_KEY, so a key for one provider is never sent to another.
+        self.key_env = self.config.get("api_key_env") or "OPENAI_API_KEY"
+        self.api_key = os.environ.get(self.key_env) or self.config.get("api_key")
         self._client = None
         return True
 
@@ -44,7 +49,7 @@ class OpenAIInference(Brick):
         except ImportError as exc:  # pragma: no cover
             raise BrickError("openai SDK not installed (uv sync --extra providers)", code=-32004) from exc
         if not self.api_key and not self.base_url:
-            raise BrickError("no OPENAI_API_KEY and no base_url configured", code=-32004)
+            raise BrickError(f"no {self.key_env} and no base_url configured", code=-32004)
         self._client = AsyncOpenAI(api_key=self.api_key or "not-needed", base_url=self.base_url)
         return self._client
 

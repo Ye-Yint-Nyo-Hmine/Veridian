@@ -19,6 +19,7 @@ from veridian.cli._common import (
     default_stack,
     describe_run_failure,
     err_console,
+    missing_provider_env,
     model_name,
 )
 from veridian.cli.ui import Renderer
@@ -32,8 +33,8 @@ _EXIT_CODE = {"completed": 0}  # anything else -> 1
 
 def run(
     goal: str = typer.Argument(..., help="What you want the agent to do."),
-    stack: str = typer.Option(None, "--stack", "-s", help="Stack file path or installed stack name (default: stacks/default.toml)."),
-    workspace: Path = typer.Option(Path.cwd(), "--workspace", "-w", help="Workspace root."),
+    stack: str = typer.Option(None, "--stack", "-s", help="Stack file path or installed stack name (default: your configured stack, else the built-in one)."),
+    workspace: Path = typer.Option(None, "--workspace", "-w", help="Workspace root (default: cwd)."),
     max_iterations: int = typer.Option(12, help="Cap on orchestrator loop iterations."),
 ) -> None:
     """Run the agent loop for a single goal, through whichever orchestrator the stack binds."""
@@ -48,9 +49,18 @@ def run(
         err_console.print(f"[v.err]stack {resolved.name!r} binds no orchestrator[/]")
         raise typer.Exit(1)
 
+    # A one-shot has no prompt to recover at, so a missing key is fatal here rather than a warning.
+    missing = missing_provider_env(resolved)
+    if missing:
+        err_console.print(
+            f"[v.err]{' and '.join(missing)} not set[/] — `veridian run` needs an inference provider. "
+            f"Set it, or pass --stack with a local model."
+        )
+        raise typer.Exit(1)
+
     renderer = Renderer(console, err_console)
     try:
-        code = asyncio.run(_run(resolved, goal, workspace.resolve(), max_iterations, renderer))
+        code = asyncio.run(_run(resolved, goal, (workspace or Path.cwd()).resolve(), max_iterations, renderer))
     except KeyboardInterrupt:
         renderer.run_interrupted()
         raise typer.Exit(130)

@@ -52,7 +52,45 @@ built entirely out of bricks.
 Not yet in scope: the marketplace, WASM and Firecracker isolation, remote transport, the desktop
 app, and the Rust kernel port. See [`ROADMAP.md`](ROADMAP.md).
 
-## Quick start
+## Install
+
+**Linux / macOS**
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Ye-Yint-Nyo-Hmine/Veridian/main/install.sh | sh
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/Ye-Yint-Nyo-Hmine/Veridian/main/install.ps1 | iex
+```
+
+Then run `veridian` in any project directory:
+
+```bash
+cd ~/code/my-project
+veridian
+```
+
+**The directory you run it from is the workspace.** That is where context is retrieved, where tools
+read and write, and where bricks are confined. There is nothing to configure per project.
+
+The installer fetches a signed-by-checksum release tarball, gives Veridian its own Python 3.13
+environment (installing [uv](https://docs.astral.sh/uv/) first if you don't have it), and puts a
+`veridian` launcher on your PATH. It installs under `~/.veridian` and touches nothing else; re-run
+it any time to upgrade. `veridian doctor` reports what it found.
+
+The first run asks two questions — which model provider, and which agent — and remembers the
+answers. Providers offered: Anthropic, OpenAI, Google Gemini, DeepSeek, Moonshot (Kimi), Ollama,
+and any other OpenAI-compatible server. Ollama is detected rather than asked about: Veridian finds
+the running server and lists the models you have pulled, so you type neither a URL nor a model
+name. Set a provider key in your environment beforehand and it will use that instead of asking, and
+run `/setup` in a session to change any of it later.
+
+## Quick start from a checkout
+
+Contributors run it in place, with no install:
 
 ```bash
 uv sync --extra dev
@@ -60,13 +98,15 @@ uv run veridian doctor
 uv run veridian                       # interactive session — type a goal, Ctrl-D to exit
 ```
 
-`uv run veridian` starts the interactive session. It prints the active stack, model, and workspace,
-takes a goal at the `›` prompt, and streams the orchestrator's plan, tool calls, and output. `/help`
-lists the session commands. Ctrl-C interrupts a running goal without killing the session; Ctrl-D
-exits.
+A checkout always wins over an installed copy, so working on Veridian never picks up the released
+one by accident.
 
-For a single goal in a script or a CI step, `uv run veridian run "add a docstring and run the
-tests"` does the same thing once and exits with a status code.
+Either way, the interactive session prints the active stack, model, and workspace, takes a goal at
+the `›` prompt, and streams the orchestrator's plan, tool calls, and output. `/help` lists the
+session commands. Ctrl-C interrupts a running goal without killing the session; Ctrl-D exits.
+
+For a single goal in a script or a CI step, `veridian run "add a docstring and run the tests"` does
+the same thing once and exits with a status code.
 
 Either form needs an inference provider. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, or point a
 stack at a reachable OpenAI-compatible server (Ollama, llama.cpp, vLLM, LM Studio). With every

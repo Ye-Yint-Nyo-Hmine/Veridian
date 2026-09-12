@@ -47,6 +47,14 @@ Before Milestone 2 a manifest saying `network = false` was a note. Now it is a b
   `/compact`, `@file` mentions, plan and auto modes, and session persistence with `--resume`.
 - **`pre-installed/`** — a complete autonomous coding agent (verifying loop, git awareness, failure
   recovery, repo-map context, AGENT.md, skills) built entirely from bricks, touching no kernel code.
+- **A one-line install.** `install.sh` / `install.ps1` fetch a checksum-verified release tarball,
+  build Veridian its own Python 3.13 environment, and put a launcher on PATH, so `veridian` runs in
+  any directory and takes that directory as its workspace. Resolution of the distribution tree
+  (`src/veridian/_paths.py`) now prefers an explicit `VERIDIAN_ROOT`, then a development checkout,
+  then the installed tree — a checkout always wins, so the two coexist on one machine. A first run
+  asks for a provider and an agent — Anthropic, OpenAI, Gemini, DeepSeek, Moonshot, or a detected
+  Ollama — and records the answers under `VERIDIAN_HOME`; `/setup` asks again and rebinds the live
+  session.
 
 ## Next
 

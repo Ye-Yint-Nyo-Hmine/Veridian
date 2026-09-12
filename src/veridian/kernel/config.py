@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from veridian import __version__
+from veridian._paths import veridian_root
 from veridian.contracts import validate_document
 from veridian.contracts._schemas import SchemaValidationError
 from veridian.kernel.errors import StackConfigError
@@ -19,11 +20,12 @@ from veridian.security.policy import Policy
 
 
 def find_repo_root(start: Path | None = None) -> Path:
-    here = (start or Path.cwd()).resolve()
-    for base in (here, *here.parents):
-        if (base / "schemas" / "protocol").is_dir() and (base / "pyproject.toml").is_file():
-            return base
-    return here
+    """The distribution tree: a development checkout above ``start``, else the installed tree.
+
+    See :mod:`veridian._paths` for the full order. The cwd fallback is kept so callers that only
+    want *somewhere* to resolve a relative path behave as they always have.
+    """
+    return veridian_root(start) or (start or Path.cwd()).resolve()
 
 
 def resolve_stack_ref(ref: str | Path, *, repo_root: Path | None = None) -> Path:

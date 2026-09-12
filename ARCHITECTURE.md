@@ -33,6 +33,24 @@ agent shape.
 The kernel knows contract *names* as opaque strings. It never imports a brick; a test enforces
 this.
 
+## Finding itself (`src/veridian/_paths.py`)
+
+`bricks/`, `stacks/`, `schemas/`, `pre-installed/`, and `sdks/` are resolved as siblings under one
+**distribution root**, and several of them reference each other by paths relative to it — so they
+ship and move together, as a tree rather than as a Python package. `veridian_root()` locates that
+tree: an explicit `VERIDIAN_ROOT` first, then a development checkout found by walking up from the
+current directory, then the installed tree named by `VERIDIAN_HOME/current`.
+
+The checkout deliberately outranks the installed tree, so a contributor working inside a clone gets
+that clone's bricks even with a released Veridian installed on the same machine. Only a real
+Veridian checkout satisfies the test, so an unrelated project can never shadow the install.
+
+`install.sh` / `install.ps1` write the installed form: `VERIDIAN_HOME/versions/<v>/{app,venv}` plus
+a one-line `current` pointer naming the active version. The pointer is a file rather than a symlink
+(symlinks need elevation on Windows) and is written last, so an interrupted install is never the
+live one. The module imports nothing from Veridian — `contracts/_schemas.py` needs it, and reaching
+`plugin_runtime` from there would cycle.
+
 ## The plugin runtime (`src/veridian/plugin_runtime/`)
 
 | Module | Responsibility |

@@ -3,35 +3,84 @@
 ## Install
 
 ```bash
-uv sync --extra dev
-# for the inference bricks and their live tests:
-uv sync --extra dev --extra providers
+curl -LsSf https://raw.githubusercontent.com/Ye-Yint-Nyo-Hmine/Veridian/main/install.sh | sh
 ```
+
+```powershell
+irm https://raw.githubusercontent.com/Ye-Yint-Nyo-Hmine/Veridian/main/install.ps1 | iex
+```
+
+Veridian lands under `~/.veridian` with its own Python 3.13 environment, and a `veridian` launcher
+goes on your PATH. [uv](https://docs.astral.sh/uv/) is installed first if you don't have it — it is
+what provides the interpreter, so you do not need a matching Python yourself.
+
+Options, for either script: `--version <v>` / `-Version <v>` to pin a release, `--no-modify-path` /
+`-NoModifyPath` to skip the shell-profile edit, `--force` / `-Force` to reinstall the current
+version, and `VERIDIAN_HOME` to install somewhere other than `~/.veridian`. Re-running the installer
+is the upgrade path: the new version is built and smoke-tested in full before it becomes active, so
+a failed upgrade leaves the working install alone.
+
+To work on Veridian itself, use a checkout instead — `uv sync --extra dev`, then `uv run veridian`.
+A checkout always takes precedence over an installed copy, so the two coexist.
 
 ## Check your environment
 
 ```bash
-uv run veridian doctor
+veridian doctor
 ```
 
 Everything except "an inference provider" should be `ok`. The kernel and the whole hermetic test
-suite run with no provider configured.
+suite run with no provider configured. `doctor` also prints whether you are running an installed
+copy or a checkout, which root it resolved, and whether the launcher on your PATH is the one this
+install wrote — the usual explanation for "my upgrade did nothing".
 
 ## Your first session
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...        # or OPENAI_API_KEY, or a local server (see below)
-uv run veridian stack validate stacks/default.toml
-uv run veridian --workspace /path/to/a/scratch/repo
+cd /path/to/a/scratch/repo
+veridian
 ```
 
-`uv run veridian` starts the interactive session. It prints the active stack, the inference
-binding, and the workspace, then waits at a `›` prompt. Type a goal and it streams the
+**The directory you start it in becomes the workspace** — where context is retrieved from, where
+tools read and write, and where bricks are confined. Use `--workspace` to point somewhere else.
+
+The first run asks which model provider to use and which agent to run:
+
+| Provider | Brick | Key |
+|---|---|---|
+| Anthropic (Claude) | `inference/anthropic` | `ANTHROPIC_API_KEY` |
+| OpenAI (GPT) | `inference/openai` | `OPENAI_API_KEY` |
+| Google (Gemini) | `inference/openai` | `GEMINI_API_KEY` |
+| DeepSeek | `inference/openai` | `DEEPSEEK_API_KEY` |
+| Moonshot (Kimi) | `inference/openai` | `MOONSHOT_API_KEY` |
+| Ollama | `inference/local` | none |
+| Other OpenAI-compatible server | `inference/local` | none |
+
+Gemini, DeepSeek and Moonshot serve the OpenAI chat-completions API, so they are the same adapter
+behind a different base URL — see [`../bricks/`](../bricks/).
+
+**Ollama is detected, not asked for.** Veridian looks for a server on Ollama's port (honouring
+`OLLAMA_HOST`), then lists the models you have actually pulled so you can pick one. You never type
+a URL or a model name. If nothing is running it falls back to the default endpoint and says so, so
+starting Ollama later is all it takes. Pick "Other OpenAI-compatible server" for llama.cpp, vLLM or
+LM Studio on a different port — that one does ask for the URL, then lists that server's models.
+
+The answers are written to `~/.veridian/` and it never asks again: a generated stack in
+`~/.veridian/stacks/veridian.toml`, the choice of default in `~/.veridian/config.toml`, and — only
+if you ask it to save one — your API key in `~/.veridian/env`. That last file is plaintext; the
+same variable set in your shell overrides it and is the better option if you already manage secrets
+elsewhere. Run `/setup` in a session to answer the questions again — switching provider is two
+answers rather than a TOML edit, and the running session is rebound in place. The questions are
+skipped entirely when stdin is not a terminal, so scripts and CI are unaffected.
+
+It then prints the active stack, the inference binding, and the workspace, and waits at a `›`
+prompt. Type a goal and it streams the
 orchestrator's plan, active steps, tool calls, and model output, then a final status line. `/help`
 lists the session commands (it is rendered from the command registry, so it can't drift);
 Ctrl-C interrupts a running goal; Ctrl-D exits.
 
-Session commands: `/stack`, `/workspace`, `/mode` (cycle plan ↔ auto — plan enforces
+Session commands: `/setup` (re-run the provider and agent questions, then rebind the session — a
+cancelled answer changes nothing), `/stack`, `/workspace`, `/mode` (cycle plan ↔ auto — plan enforces
 `contract:sandbox` so no command execution; the `workspace:write` withholding is advisory this
 milestone), `/model` (list the models the inference brick reports and switch live — the brick is
 rebound and restarted, and a failed switch keeps the previous model), `/context` (what is loaded
@@ -50,11 +99,14 @@ pick from.
 For a single goal without the prompt — in a script, or a CI step — use the one-shot form:
 
 ```bash
-uv run veridian run "add a docstring to the top-level function and run the tests" \
+veridian run "add a docstring to the top-level function and run the tests" \
   --workspace /path/to/a/scratch/repo
 ```
 
-It exits `0` when the run completes, non-zero otherwise.
+It exits `0` when the run completes, non-zero otherwise. Unlike the interactive session, it refuses
+to start without a reachable provider, since there is no prompt to correct it at.
+
+Every command below is written as `veridian`; from a checkout, prefix it with `uv run`.
 
 ## Running fully local
 
@@ -63,7 +115,7 @@ It exits `0` when the run completes, non-zero otherwise.
 
 ```bash
 export VERIDIAN_LOCAL_BASE_URL=http://localhost:11434/v1
-uv run veridian --stack stacks/local-only.toml
+veridian --stack local-only
 ```
 
 Pull the models the stack names (`llama3.2`, `nomic-embed-text`) or edit the `config` in the stack
@@ -80,10 +132,11 @@ only need to edit a stack file to change *provider*, not to change model.
 loop that checks each objective against real evidence, git awareness, failure recovery, repo-map
 context, `AGENT.md` guidelines, and user skills.
 
-Its stack deliberately names no provider, so add an inference binding before running it:
+Choosing it at the first run is the easy path — that writes a copy with your inference binding
+already filled in. Otherwise its stack deliberately names no provider, so add one yourself:
 
 ```bash
-cp pre-installed/stacks/autonomous.toml stacks/autonomous-local.toml
+cp pre-installed/stacks/autonomous.toml ~/.veridian/stacks/autonomous-local.toml
 ```
 
 ```toml
@@ -93,7 +146,7 @@ config = { model = "your-local-model" }
 ```
 
 ```bash
-uv run veridian --stack stacks/autonomous-local.toml --workspace /path/to/a/scratch/repo
+veridian --stack autonomous-local --workspace /path/to/a/scratch/repo
 ```
 
 Use a scratch repository. This agent edits files and runs commands.
